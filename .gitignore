@@ -1,0 +1,23 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.*.local.json
+appsettings.Development.json
+
+# Node / Vite (front en web/)
+node_modules/
+dist/
+*.tsbuildinfo
+*.local
+
+# Build del front que cae en wwwroot (se regenera con `npm run build` en web/)
+src/Synapsys.Connector/wwwroot/
+
+# IDE / OS
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

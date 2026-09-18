@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../labcore api"
+		},
+		{
+			"path": "../../Middleware/middleware.service"
+		}
+	],
+	"settings": {}
+}

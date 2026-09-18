@@ -1,0 +1,78 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "connector: run",
+      "detail": "Levanta el conector (ASTM en 5150, front + API en http://localhost:5081).",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/Synapsys.Connector/Synapsys.Connector.csproj"
+      ],
+      "options": {
+        "env": {
+          "ASPNETCORE_ENVIRONMENT": "Development"
+        }
+      },
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "connector: watch",
+      "detail": "Igual que 'connector: run' pero recompila y reinicia al guardar.",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "watch",
+        "--project",
+        "${workspaceFolder}/src/Synapsys.Connector/Synapsys.Connector.csproj",
+        "run"
+      ],
+      "options": {
+        "env": {
+          "ASPNETCORE_ENVIRONMENT": "Development"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "web: dev",
+      "detail": "Front en modo dev (http://localhost:5173) con proxy a /api y /ws.",
+      "type": "process",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "web: build",
+      "detail": "Compila el front a wwwroot para que lo sirva Kestrel.",
+      "type": "process",
+      "command": "npm",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "build",
+      "detail": "Compila toda la solucion.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/Synapsys.Connector.sln"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}
