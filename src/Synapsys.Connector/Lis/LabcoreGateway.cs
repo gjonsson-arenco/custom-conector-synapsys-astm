@@ -11,7 +11,8 @@ namespace Synapsys.Connector.Lis;
 /// <summary>
 /// Implementacion de <see cref="ILisGateway"/> contra labcore-api. Cachea el mapeo de codigos
 /// que vive en el LIS (GET /instruments/{id}/tests) y lo aplica en las dos direcciones. Antes de
-/// informar un resultado lo traduce con el mapeo de resultados (settings/result-mappings.json).
+/// informar un resultado lo traduce con el mapeo de resultados (settings/result-mappings.json); los
+/// cultivos, ademas, con los catalogos de microorganismos y antibioticos.
 /// </summary>
 public sealed class LabcoreGateway : ILisGateway
 {
@@ -109,6 +110,7 @@ public sealed class LabcoreGateway : ILisGateway
         {
             UserId = _options.UserId,
             InstrumentId = _instrument.Current.InstrumentId,
+            Overwrite = _options.OverwriteResults,
             Results = payload
         };
 
@@ -124,6 +126,75 @@ public sealed class LabcoreGateway : ILisGateway
         }
 
         _logger.LogInformation("Se enviaron {Count} resultados del tubo {Barcode} al LIS.", payload.Count, barcode);
+    }
+
+    public async Task SaveCultureAsync(CultureReport culture, CancellationToken cancellationToken)
+    {
+        var mapping = await GetMappingAsync(cancellationToken);
+
+        if (!mapping.ByIncoming.TryGetValue(culture.TestCode.Trim(), out var map))
+        {
+            _logger.LogWarning("Sin mapeo para el cultivo {Code}: no se informa el cultivo del tubo {Barcode}.", culture.TestCode, culture.Barcode);
+            return;
+        }
+
+        var request = new SaveCultureDto
+        {
+            UserId = _options.UserId,
+            InstrumentId = _instrument.Current.InstrumentId,
+            // Cada envio es el informe completo: siempre reemplaza al anterior.
+            Overwrite = true,
+            TestCode = map.TestCode,
+            Summary = culture.StatusCode is null ? null : Translate(_catalogs.Results, culture.StatusCode, "resultado", culture),
+            Isolates = culture.Isolates
+                .Select(isolate => new CultureIsolateDto
+                {
+                    Number = isolate.Number,
+                    Organism = Translate(_catalogs.Organisms, isolate.OrganismCode, "microorganismo", culture),
+                    Mechanisms = isolate.Mechanisms,
+                    Antibiotics = isolate.Antibiogram
+                        .Select(row => new CultureAntibioticDto
+                        {
+                            Name = Translate(_catalogs.Antibiotics, row.AntibioticCode, "antibiotico", culture),
+                            Interpretation = row.Interpretation,
+                            Mic = row.Mic
+                        })
+                        .ToList()
+                })
+                .ToList()
+        };
+
+        var http = _httpClientFactory.CreateClient("labcore");
+
+        using var response = await http.PostAsJsonAsync(
+            $"samples/{Uri.EscapeDataString(culture.Barcode)}/cultures", request, Json, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("labcore-api rechazo el cultivo {Test} del tubo {Barcode} ({Status}): {Body}",
+                map.TestCode, culture.Barcode, (int)response.StatusCode, body);
+            response.EnsureSuccessStatusCode();
+        }
+
+        _logger.LogInformation("Se informo el cultivo {Test} del tubo {Barcode} al LIS: {Isolates} aislados.",
+            map.TestCode, culture.Barcode, culture.Isolates.Count);
+    }
+
+    /// <summary>
+    /// Nombre del codigo en el catalogo. Si falta, se informa el codigo tal cual: es preferible un
+    /// "PSEAER" en el informe a perder el aislado; queda avisado para completar el catalogo.
+    /// </summary>
+    private string Translate(CodeCatalog catalog, string code, string kind, CultureReport culture)
+    {
+        var name = catalog.Translate(code);
+        if (name is not null)
+        {
+            return name;
+        }
+
+        _logger.LogWarning("El {Kind} {Code} no esta en el catalogo: se informa el codigo (tubo {Barcode}).", kind, code, culture.Barcode);
+        return code;
     }
 
     private async Task<Mapping> GetMappingAsync(CancellationToken cancellationToken)
@@ -226,7 +297,33 @@ public sealed class LabcoreGateway : ILisGateway
     {
         public int UserId { get; init; }
         public int InstrumentId { get; init; }
+        public bool Overwrite { get; init; }
         public IReadOnlyList<SaveTestResultDto> Results { get; init; } = [];
+    }
+
+    private sealed class SaveCultureDto
+    {
+        public int UserId { get; init; }
+        public int InstrumentId { get; init; }
+        public bool Overwrite { get; init; }
+        public string? TestCode { get; init; }
+        public string? Summary { get; init; }
+        public IReadOnlyList<CultureIsolateDto> Isolates { get; init; } = [];
+    }
+
+    private sealed class CultureIsolateDto
+    {
+        public int Number { get; init; }
+        public string Organism { get; init; } = string.Empty;
+        public IReadOnlyList<string> Mechanisms { get; init; } = [];
+        public IReadOnlyList<CultureAntibioticDto> Antibiotics { get; init; } = [];
+    }
+
+    private sealed class CultureAntibioticDto
+    {
+        public string Name { get; init; } = string.Empty;
+        public string Interpretation { get; init; } = string.Empty;
+        public string? Mic { get; init; }
     }
 
     private sealed class SaveTestResultDto

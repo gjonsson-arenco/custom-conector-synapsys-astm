@@ -74,4 +74,10 @@ public sealed class LabcoreOptions
 
     /// <summary>Cada cuanto se refresca el mapeo de codigos que vive en el LIS.</summary>
     public int MappingRefreshMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// Pisa un resultado que ya estaba cargado (no validado) cuando el equipo lo vuelve a mandar.
+    /// Los cultivos se pisan siempre: cada envio es el informe completo.
+    /// </summary>
+    public bool OverwriteResults { get; set; } = true;
 }

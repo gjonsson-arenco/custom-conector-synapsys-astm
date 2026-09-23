@@ -18,6 +18,8 @@
     <!-- Los settings vivos son de cada instalacion: nunca se copian al build ni al publish. -->
     <Content Remove="settings\**" />
     <None Remove="settings\**" />
+    <Content Remove="data\**" />
+    <None Remove="data\**" />
   </ItemGroup>
 
 </Project>

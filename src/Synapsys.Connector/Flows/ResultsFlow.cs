@@ -1,21 +1,25 @@
 using Microsoft.Extensions.Logging;
 using Synapsys.Connector.Astm;
 using Synapsys.Connector.Lis;
+using Synapsys.Connector.Microbiology;
 
 namespace Synapsys.Connector.Flows;
 
 /// <summary>
-/// Resultados: Synapsys manda H/P/O/R/L. Agrupamos los R por tubo (segun el O que los precede)
-/// y los guardamos en el LIS. No hay respuesta ASTM: alcanza con los ACK de la recepcion.
+/// Resultados: Synapsys manda H/P/O/R/L. Los resultados simples se guardan por tubo tal cual; los
+/// de cultivo (estado GND y aislados) se acumulan en el <see cref="CultureStore"/> y al LIS va el
+/// informe completo del cultivo. No hay respuesta ASTM: alcanza con los ACK de la recepcion.
 /// </summary>
 public sealed class ResultsFlow
 {
     private readonly ILisGateway _lis;
+    private readonly CultureStore _cultures;
     private readonly ILogger<ResultsFlow> _logger;
 
-    public ResultsFlow(ILisGateway lis, ILogger<ResultsFlow> logger)
+    public ResultsFlow(ILisGateway lis, CultureStore cultures, ILogger<ResultsFlow> logger)
     {
         _lis = lis;
+        _cultures = cultures;
         _logger = logger;
     }
 
@@ -24,52 +28,15 @@ public sealed class ResultsFlow
         AstmSeparators separators,
         CancellationToken cancellationToken)
     {
-        var bySample = new Dictionary<string, List<InstrumentResult>>(StringComparer.OrdinalIgnoreCase);
-        string? currentBarcode = null;
+        var parsed = ResultsParser.Parse(incoming, separators);
 
-        foreach (var record in incoming)
+        foreach (var warning in parsed.Warnings)
         {
-            switch (record.Type)
-            {
-                case 'O':
-                    currentBarcode = AstmValues.FirstMeaningful(record.Field(3), separators.Component);
-                    if (!string.IsNullOrEmpty(currentBarcode) && !bySample.ContainsKey(currentBarcode))
-                    {
-                        bySample[currentBarcode] = [];
-                    }
-
-                    break;
-
-                case 'R':
-                    if (string.IsNullOrEmpty(currentBarcode))
-                    {
-                        _logger.LogWarning("Resultado sin un O previo con codigo de barras: {Record}", record);
-                        break;
-                    }
-
-                    var code = AstmValues.FirstMeaningful(record.Field(3), separators.Component);
-                    if (string.IsNullOrEmpty(code))
-                    {
-                        _logger.LogWarning("Resultado sin codigo de prueba: {Record}", record);
-                        break;
-                    }
-
-                    bySample[currentBarcode].Add(new InstrumentResult(
-                        code,
-                        record.Field(4).Trim(),
-                        Flags(record.Field(7), separators)));
-
-                    break;
-            }
+            _logger.LogWarning("{Warning}", warning);
         }
 
-        foreach (var (barcode, results) in bySample)
+        foreach (var (barcode, results) in parsed.Results)
         {
-            if (results.Count == 0)
-            {
-                continue;
-            }
-
             try
             {
                 await _lis.SaveResultsAsync(barcode, results, cancellationToken);
@@ -79,19 +46,49 @@ public sealed class ResultsFlow
                 _logger.LogError(ex, "No se pudieron guardar los resultados del tubo {Barcode}.", barcode);
             }
         }
+
+        var barcodes = parsed.CultureStatuses.Select(status => status.Barcode)
+            .Concat(parsed.Isolates.Select(isolate => isolate.Barcode))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var barcode in barcodes)
+        {
+            await SaveCulturesAsync(barcode, parsed, cancellationToken);
+        }
     }
 
-    private static IReadOnlyList<string> Flags(string field, AstmSeparators separators)
+    /// <summary>
+    /// Primero se registra lo recibido y despues se informa. Si el LIS falla, el cultivo queda
+    /// igual registrado y el proximo mensaje de ese tubo manda el informe completo, con esto incluido.
+    /// </summary>
+    private async Task SaveCulturesAsync(string barcode, ParsedResults parsed, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(field))
+        var warnings = new List<string>();
+
+        var reports = await _cultures.ApplyAsync(
+            barcode,
+            parsed.CultureStatuses.Where(status => Same(status.Barcode, barcode)).ToList(),
+            parsed.Isolates.Where(isolate => Same(isolate.Barcode, barcode)).ToList(),
+            warnings,
+            cancellationToken);
+
+        foreach (var warning in warnings)
         {
-            return [];
+            _logger.LogWarning("{Warning}", warning);
         }
 
-        return field
-            .Split([separators.Component, separators.Repeat])
-            .Select(flag => flag.Trim())
-            .Where(flag => flag.Length > 0)
-            .ToList();
+        foreach (var report in reports)
+        {
+            try
+            {
+                await _lis.SaveCultureAsync(report, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "No se pudo guardar el cultivo {Test} del tubo {Barcode}.", report.TestCode, barcode);
+            }
+        }
     }
+
+    private static bool Same(string left, string right) => string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 }

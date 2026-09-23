@@ -6,6 +6,7 @@ using Synapsys.Connector.Astm;
 using Synapsys.Connector.Configuration;
 using Synapsys.Connector.Flows;
 using Synapsys.Connector.Lis;
+using Synapsys.Connector.Microbiology;
 using Synapsys.Connector.Monitoring;
 using Synapsys.Connector.Runtime;
 using Synapsys.Connector.Web;
@@ -32,6 +33,12 @@ builder.Services.AddSingleton<LabcoreTestMappings>();
 builder.Services.AddSingleton<AstmChannelFactory>();
 builder.Services.AddSingleton<QueryFlow>();
 builder.Services.AddSingleton<ResultsFlow>();
+
+builder.Services.Configure<CultureStoreOptions>(builder.Configuration.GetSection(CultureStoreOptions.SectionName));
+builder.Services.PostConfigure<CultureStoreOptions>(options =>
+    options.Directory = Path.Combine(builder.Environment.ContentRootPath, options.Directory));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<CultureStore>();
 builder.Services.AddSingleton<TransmissionRouter>();
 
 builder.Services.AddSingleton<IConnectorMonitor, ConnectorMonitor>();

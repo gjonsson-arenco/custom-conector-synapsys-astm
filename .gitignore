@@ -19,6 +19,9 @@ src/Synapsys.Connector/wwwroot/
 # Settings vivos de cada instalacion (se crean al arrancar)
 src/Synapsys.Connector/settings/
 
+# Cultivos en curso (estado acumulado de microbiologia de cada instalacion)
+src/Synapsys.Connector/data/
+
 # IDE / OS
 .idea/
 *.swp

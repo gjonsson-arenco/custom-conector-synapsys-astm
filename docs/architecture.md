@@ -14,6 +14,7 @@ flowchart LR
     W --> R[TransmissionRouter]
     R --> Q[QueryFlow]
     R --> RF[ResultsFlow]
+    RF --> CS[CultureStore]
     Q --> G[ILisGateway]
     RF --> G
     G -->|HTTP| L[labcore-api]
@@ -46,10 +47,54 @@ sequenceDiagram
     participant S as Synapsys
     participant C as Connector
     participant L as labcore-api
-    S->>C: H/P/O/R(IncomingCode, valor, flags)/L
-    C->>C: IncomingCode → TestCode; valor codificado → descripción (o × factor)
+    S->>C: H/P/O(^^^RTO)/R(^^^OTHER, valor, flags)/L
+    C->>C: IncomingCode del O → TestCode; valor codificado → descripción (o × factor)
     C->>L: POST /samples/{barcode}/results (status 2)
 ```
+
+El `R` de Synapsys no dice qué prueba es sino de qué **categoría** es (componente 4 del campo 3).
+La prueba está en el `O`:
+
+| `O` | `R` | Qué es |
+| --- | --- | --- |
+| `^^^RTO` | `^^^OTHER` = `--` | Resultado simple de la prueba del `O`; el valor pasa por el mapeo de resultados. |
+| `^^^GC` | `^^^GND` = `C3` | Estado del cultivo GC (positivo, negativo…). |
+| `barcode^n^organismo…^^^ISOLATE RESULT…` (campo 14 = `GC`) | `^^^ID` = `^PSEAER` · `^^^AST^^ATM^,` = `^^S^^S^bnf` | Aislado *n* del cultivo GC: microorganismo y antibiograma (droga en el componente 6; interpretación = la última informada entre los componentes 3–5; CIM en 1–2). |
+
+Un `R` de otra categoría bajo un `O` común se toma con su propio código, como cualquier equipo ASTM.
+
+### Cultivos (microbiología)
+
+El LIS no tiene modelo de microbiología: el cultivo se guarda como **texto tabulado** en la prueba
+del cultivo (CGR, tipo compuesto → `l_resultcomp`). Synapsys lo informa **por partes** (estado,
+aislado 1, aislado 2…, en comunicaciones distintas), así que el conector acumula el cultivo y
+manda siempre el informe completo.
+
+```mermaid
+sequenceDiagram
+    participant S as Synapsys
+    participant C as Connector
+    participant D as CultureStore (data/cultures)
+    participant L as labcore-api
+    S->>C: O ^^^GC / R ^^^GND = C3
+    C->>D: estado GC = C3
+    C->>L: POST /samples/{barcode}/cultures (C3, sin aislados)
+    S->>C: O ...^1^PSEAER ... GC / R ID, R AST...
+    C->>D: aislado 1 de GC
+    C->>L: POST /samples/{barcode}/cultures (C3 + aislado 1, overwrite)
+```
+
+- **El conector acumula, la API formatea.** `CultureStore` guarda por tubo, en códigos del
+  instrumento, el estado de cada cultivo y sus aislados por número (un JSON por tubo en
+  `data/cultures/`). El gateway traduce los códigos con los catálogos (estado con el mapeo de
+  resultados, microorganismos y antibióticos con los suyos) y `labcore-api` arma el texto con el
+  formato del LIS (`¬n¬` = n tabulaciones) — el mismo que armaba el adapter de Epicenter.
+- **Idempotente.** Cada envío es la foto completa y reemplaza al anterior; un aislado reenviado
+  reemplaza al del mismo número.
+- **Si el LIS falla** el cultivo queda registrado igual, y el próximo mensaje de ese tubo manda
+  el informe completo con lo que no había llegado.
+- **Códigos sin catálogo** se informan tal cual (`PSEAER`) y quedan en el log, para no perder el aislado.
+- **Retención.** Un tubo sin novedades en `Cultures:RetentionDays` (120) se olvida.
 
 ## Estructura y responsabilidades
 
@@ -84,11 +129,14 @@ sequenceDiagram
 | **`Flows/`** | Orquestación de negocio sobre los registros. |
 | `Flows/TransmissionRouter.cs` | Decide el flow: hay `Q` → consulta; hay `R` → resultados. |
 | `Flows/QueryFlow.cs` | Extrae el código de barras del `Q`, consulta el LIS y arma la respuesta `H/P/O/L` (o query negativa). |
-| `Flows/ResultsFlow.cs` | Agrupa los `R` por tubo (según el `O` previo) y los guarda en el LIS. |
+| `Flows/ResultsParser.cs` | Decodifica los `O`/`R` de Synapsys por categoría: resultados simples, estado de cultivo y aislados. |
+| `Flows/ResultsFlow.cs` | Guarda los resultados simples por tubo y pasa los de cultivo por el `CultureStore`. |
+| **`Microbiology/`** | Estado de los cultivos en curso. |
+| `Microbiology/CultureStore.cs` | Acumula estado y aislados de cada cultivo por tubo y devuelve el informe completo de los que cambiaron. |
 | `Flows/AstmValues.cs` | Helpers para leer identificadores y armar los registros de respuesta. |
 | **`Lis/`** | Frontera con el LIS (mapeo + HTTP encapsulados). |
-| `Lis/ILisGateway.cs` | Contrato en términos de dominio: `GetOrdersAsync` / `SaveResultsAsync`. Los flows no saben de HTTP ni de mapeo. |
-| `Lis/LabcoreGateway.cs` | Implementación contra `labcore-api`: cachea el mapeo de códigos (`GET /instruments/{id}/tests`), traduce resultados codificados o aplica factor, y traduce en ambos sentidos. |
+| `Lis/ILisGateway.cs` | Contrato en términos de dominio: `GetOrdersAsync` / `SaveResultsAsync` / `SaveCultureAsync`. Los flows no saben de HTTP ni de mapeo. |
+| `Lis/LabcoreGateway.cs` | Implementación contra `labcore-api`: cachea el mapeo de códigos (`GET /instruments/{id}/tests`), traduce resultados codificados o aplica factor, traduce en ambos sentidos y arma el cultivo con los catálogos. |
 | `Lis/LabcoreTestMappings.cs` | Lectura y edición del mapeo de pruebas del LIS vía `labcore-api` (`GET/POST/PUT/DELETE /instruments/{id}/tests`). Cada escritura invalida la caché del gateway. |
 
 ## Decisiones de diseño
@@ -111,7 +159,7 @@ Se separa lo que es **de despliegue** (lo toca quien instala) de lo que es **ope
 
 | Archivo | Contenido | Quién lo edita | Cuándo aplica |
 | --- | --- | --- | --- |
-| `appsettings.json` | `Urls`, `Labcore` (`BaseUrl`, `ApiKey`, `UserId`, `MappingRefreshMinutes`), `Settings:Directory`, `Logging` | Instalador | Al reiniciar el servicio |
+| `appsettings.json` | `Urls`, `Labcore` (`BaseUrl`, `ApiKey`, `UserId`, `MappingRefreshMinutes`, `OverwriteResults`), `Cultures` (`Directory`, `RetentionDays`), `Settings:Directory`, `Logging` | Instalador | Al reiniciar el servicio |
 | `settings/instrument.json` | `instrumentId` (Analizadores.a_id) | Front › Instrumento | En el acto (invalida la caché de mapeo) |
 | `settings/communication.json` | `transport` (`mode`, `host`, `port`, `reconnectSeconds`) y `astm` (`level`, checksum, timeouts, separadores) | Front › Comunicación | Al guardar se reinicia el puerto si estaba abierto |
 | `settings/result-mappings.json` | `mappings: [{ code, description }]` | Front › Mapeo de resultados (alta, edición, baja, borrar todo, CSV) | En el acto |
@@ -158,6 +206,10 @@ realtime, Settings (instrumento, comunicación, mapeo de tests y mapeo de result
 (microorganismos y antibióticos).
 
 ## Puntos abiertos
+
+- **Mecanismos de resistencia**: el modelo y el informe los soportan, pero falta un log real para
+  saber cómo los manda Synapsys. Hoy una categoría desconocida dentro de un aislado queda en el log
+  y se ignora.
 
 - El layout exacto de los registros `O`/`R`/`Q` sigue ASTM E1394 estándar; cuando esté la
   especificación puntual de Synapsys puede requerir ajuste fino (centralizado en
