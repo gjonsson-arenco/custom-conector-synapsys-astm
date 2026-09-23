@@ -16,6 +16,9 @@ dist/
 # Build del front que cae en wwwroot (se regenera con `npm run build` en web/)
 src/Synapsys.Connector/wwwroot/
 
+# Settings vivos de cada instalacion (se crean al arrancar)
+src/Synapsys.Connector/settings/
+
 # IDE / OS
 .idea/
 *.swp

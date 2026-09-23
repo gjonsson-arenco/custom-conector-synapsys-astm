@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
-using Synapsys.Connector.Lis;
 using Synapsys.Connector.Monitoring;
 using Synapsys.Connector.Runtime;
 
@@ -38,9 +37,6 @@ public static class ConnectorEndpoints
             await controller.RestartAsync();
             return Results.Ok(controller.Status);
         });
-
-        api.MapGet("/mappings", async (IMappingCatalog catalog, CancellationToken cancellationToken) =>
-            Results.Ok(await catalog.GetAsync(cancellationToken)));
     }
 
     public static void MapMonitorSockets(this IEndpointRouteBuilder app)

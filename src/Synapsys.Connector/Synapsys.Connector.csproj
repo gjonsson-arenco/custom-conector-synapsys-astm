@@ -11,4 +11,13 @@
 
   <!-- Kestrel, hosting y HttpClientFactory llegan por el framework Microsoft.AspNetCore.App. -->
 
+  <!-- Valores de partida de los settings editables; se copian a settings/ la primera vez. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Configuration\Defaults\*.json" LogicalName="Synapsys.Connector.Configuration.Defaults.%(Filename)%(Extension)" />
+    <Content Remove="Configuration\Defaults\*.json" />
+    <!-- Los settings vivos son de cada instalacion: nunca se copian al build ni al publish. -->
+    <Content Remove="settings\**" />
+    <None Remove="settings\**" />
+  </ItemGroup>
+
 </Project>

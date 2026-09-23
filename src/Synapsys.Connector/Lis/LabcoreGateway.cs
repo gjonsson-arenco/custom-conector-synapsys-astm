@@ -10,7 +10,8 @@ namespace Synapsys.Connector.Lis;
 
 /// <summary>
 /// Implementacion de <see cref="ILisGateway"/> contra labcore-api. Cachea el mapeo de codigos
-/// que vive en el LIS (GET /instruments/{id}/tests) y lo aplica en las dos direcciones.
+/// que vive en el LIS (GET /instruments/{id}/tests) y lo aplica en las dos direcciones. Antes de
+/// informar un resultado lo traduce con el mapeo de resultados (settings/result-mappings.json).
 /// </summary>
 public sealed class LabcoreGateway : ILisGateway
 {
@@ -18,6 +19,8 @@ public sealed class LabcoreGateway : ILisGateway
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly LabcoreOptions _options;
+    private readonly SettingsFile<InstrumentSettings> _instrument;
+    private readonly CodeCatalogs _catalogs;
     private readonly ILogger<LabcoreGateway> _logger;
 
     private readonly SemaphoreSlim _mappingGate = new(1, 1);
@@ -25,12 +28,25 @@ public sealed class LabcoreGateway : ILisGateway
     private Dictionary<string, string> _outgoingByTest = new(StringComparer.OrdinalIgnoreCase);
     private DateTimeOffset _mappingLoadedAt = DateTimeOffset.MinValue;
 
-    public LabcoreGateway(IHttpClientFactory httpClientFactory, IOptions<LabcoreOptions> options, ILogger<LabcoreGateway> logger)
+    public LabcoreGateway(
+        IHttpClientFactory httpClientFactory,
+        IOptions<LabcoreOptions> options,
+        SettingsFile<InstrumentSettings> instrument,
+        CodeCatalogs catalogs,
+        ILogger<LabcoreGateway> logger)
     {
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
+        _instrument = instrument;
+        _catalogs = catalogs;
         _logger = logger;
+
+        // Otro analizador es otro mapeo.
+        _instrument.Changed += _ => InvalidateMapping();
     }
+
+    /// <summary>Descarta el mapeo cacheado; la proxima operacion lo vuelve a pedir al LIS.</summary>
+    public void InvalidateMapping() => _mappingLoadedAt = DateTimeOffset.MinValue;
 
     public async Task<SampleOrders?> GetOrdersAsync(string barcode, CancellationToken cancellationToken)
     {
@@ -76,7 +92,7 @@ public sealed class LabcoreGateway : ILisGateway
             payload.Add(new SaveTestResultDto
             {
                 TestCode = map.TestCode,
-                Result = ApplyFactor(result.Value, map.Factor),
+                Result = _catalogs.Results.Translate(result.Value) ?? ApplyFactor(result.Value, map.Factor),
                 Status = 2,
                 Flags = result.Flags
             });
@@ -92,7 +108,7 @@ public sealed class LabcoreGateway : ILisGateway
         var request = new SaveResultsDto
         {
             UserId = _options.UserId,
-            InstrumentId = _options.InstrumentId,
+            InstrumentId = _instrument.Current.InstrumentId,
             Results = payload
         };
 
@@ -128,9 +144,15 @@ public sealed class LabcoreGateway : ILisGateway
                 return new Mapping(_byIncoming, _outgoingByTest);
             }
 
+            var instrumentId = _instrument.Current.InstrumentId;
+            if (instrumentId <= 0)
+            {
+                throw new InvalidOperationException("Falta configurar el instrumento (Settings > Instrumento).");
+            }
+
             var http = _httpClientFactory.CreateClient("labcore");
             var tests = await http.GetFromJsonAsync<InstrumentTestsDto>(
-                $"instruments/{_options.InstrumentId}/tests", Json, cancellationToken);
+                $"instruments/{instrumentId}/tests", Json, cancellationToken);
 
             var byIncoming = new Dictionary<string, TestMap>(StringComparer.OrdinalIgnoreCase);
             var outgoingByTest = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -159,7 +181,7 @@ public sealed class LabcoreGateway : ILisGateway
             _outgoingByTest = outgoingByTest;
             _mappingLoadedAt = DateTimeOffset.UtcNow;
 
-            _logger.LogInformation("Mapeo del analizador {InstrumentId} cargado: {Count} codigos.", _options.InstrumentId, byIncoming.Count);
+            _logger.LogInformation("Mapeo del analizador {InstrumentId} cargado: {Count} codigos.", instrumentId, byIncoming.Count);
 
             return new Mapping(_byIncoming, _outgoingByTest);
         }

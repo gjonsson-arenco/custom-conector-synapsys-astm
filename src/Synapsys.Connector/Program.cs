@@ -12,8 +12,7 @@ using Synapsys.Connector.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<TransportOptions>(builder.Configuration.GetSection(TransportOptions.SectionName));
-builder.Services.Configure<AstmOptions>(builder.Configuration.GetSection(AstmOptions.SectionName));
+builder.Services.AddConnectorSettings(builder.Configuration, builder.Environment);
 builder.Services.Configure<LabcoreOptions>(builder.Configuration.GetSection(LabcoreOptions.SectionName));
 
 builder.Services.AddHttpClient("labcore", (serviceProvider, http) =>
@@ -27,8 +26,9 @@ builder.Services.AddHttpClient("labcore", (serviceProvider, http) =>
     }
 });
 
-builder.Services.AddSingleton<ILisGateway, LabcoreGateway>();
-builder.Services.AddSingleton<IMappingCatalog, MockMappingCatalog>();
+builder.Services.AddSingleton<LabcoreGateway>();
+builder.Services.AddSingleton<ILisGateway>(provider => provider.GetRequiredService<LabcoreGateway>());
+builder.Services.AddSingleton<LabcoreTestMappings>();
 builder.Services.AddSingleton<AstmChannelFactory>();
 builder.Services.AddSingleton<QueryFlow>();
 builder.Services.AddSingleton<ResultsFlow>();
@@ -51,6 +51,7 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapConnectorApi();
+app.MapSettingsApi();
 app.MapMonitorSockets();
 
 // Cualquier ruta no-API cae en la SPA.

@@ -47,7 +47,7 @@ sequenceDiagram
     participant C as Connector
     participant L as labcore-api
     S->>C: H/P/O/R(IncomingCode, valor, flags)/L
-    C->>C: IncomingCode → TestCode + factor
+    C->>C: IncomingCode → TestCode; valor codificado → descripción (o × factor)
     C->>L: POST /samples/{barcode}/results (status 2)
 ```
 
@@ -63,7 +63,12 @@ sequenceDiagram
 | `Monitoring/ConnectorMonitor.cs` | Bus en memoria que difunde comunicación cruda y eventos a los WebSockets suscritos. |
 | `Monitoring/MonitoredConnection.cs` | Decora la conexión ASTM para publicar los bytes RX/TX al monitor. |
 | **`Web/`** | Plano de control HTTP. |
-| `Web/ConnectorEndpoints.cs` | REST (`/api/status`, `/api/port/*`, `/api/mappings`) y WebSockets (`/ws/comms`, `/ws/events`). |
+| `Web/ConnectorEndpoints.cs` | REST (`/api/status`, `/api/port/*`) y WebSockets (`/ws/comms`, `/ws/events`). |
+| `Web/SettingsEndpoints.cs` | REST de settings (`/api/settings/*`): instrumento, comunicacion, mapeo de tests y catálogos. |
+| **`Configuration/`** | Opciones de despliegue (appsettings) y settings editables (settings/*.json). |
+| `Configuration/SettingsFile.cs` | Un archivo JSON de settings: lectura al arrancar, guardado atomico y aviso de cambio. |
+| `Configuration/ConnectorSettings.cs` | Modelos y validacion de `instrument.json`, `communication.json` y de los catálogos. |
+| `Configuration/CodeCatalog.cs` | Catálogo código => descripción (resultados, microorganismos, antibióticos): traducción, edición e importación CSV. |
 | **`web/`** (raíz) | Front React (Vite + TS). Se compila a `wwwroot` y Kestrel lo sirve como SPA. |
 | **`Transport/`** | Establecimiento del socket, independiente del protocolo. |
 | `Transport/ITransport.cs` | Contrato que entrega conexiones (`IAstmConnection`) una por vez; `TcpConnection` ve el socket como flujo de bytes. |
@@ -83,8 +88,8 @@ sequenceDiagram
 | `Flows/AstmValues.cs` | Helpers para leer identificadores y armar los registros de respuesta. |
 | **`Lis/`** | Frontera con el LIS (mapeo + HTTP encapsulados). |
 | `Lis/ILisGateway.cs` | Contrato en términos de dominio: `GetOrdersAsync` / `SaveResultsAsync`. Los flows no saben de HTTP ni de mapeo. |
-| `Lis/LabcoreGateway.cs` | Implementación contra `labcore-api`: cachea el mapeo de códigos (`GET /instruments/{id}/tests`), aplica factor y traduce en ambos sentidos. |
-| `Lis/MappingCatalog.cs` | Origen del mapeo que ve el front. Hoy mockeado (`MockMappingCatalog`); se cableará a `labcore-api`. |
+| `Lis/LabcoreGateway.cs` | Implementación contra `labcore-api`: cachea el mapeo de códigos (`GET /instruments/{id}/tests`), traduce resultados codificados o aplica factor, y traduce en ambos sentidos. |
+| `Lis/LabcoreTestMappings.cs` | Lectura y edición del mapeo de pruebas del LIS vía `labcore-api` (`GET/POST/PUT/DELETE /instruments/{id}/tests`). Cada escritura invalida la caché del gateway. |
 
 ## Decisiones de diseño
 
@@ -99,15 +104,28 @@ sequenceDiagram
 - **Códigos de prueba mapeados en el LIS.** El mapeo `IncomingCode ↔ TestCode ↔ OutgoingCode`
   y el factor de conversión se traen de `labcore-api` y se cachean.
 
-## Configuración (`appsettings.json`)
+## Configuración
 
-| Sección | Clave | Para qué |
-| --- | --- | --- |
-| `Transport` | `Mode` (`Server`/`Client`), `Host`, `Port`, `ReconnectSeconds` | Cómo se establece el socket. |
-| `Astm` | `Level` (`LowLevel`/`HighLevel`), `UseChecksum`, `ReceiveTimeoutSeconds`, `MaxRetries`, separadores | Parámetros del protocolo. |
-| `Labcore` | `BaseUrl`, `ApiKey`, `UserId`, `InstrumentId`, `MappingRefreshMinutes` | Conexión con el LIS e identidad de escritura. |
+Se separa lo que es **de despliegue** (lo toca quien instala) de lo que es **operativo**
+(se edita desde el front). Cada archivo operativo es un tema con su propio ciclo de vida.
 
-> `Labcore.InstrumentId` es obligatorio: es la clave del mapeo de códigos.
+| Archivo | Contenido | Quién lo edita | Cuándo aplica |
+| --- | --- | --- | --- |
+| `appsettings.json` | `Urls`, `Labcore` (`BaseUrl`, `ApiKey`, `UserId`, `MappingRefreshMinutes`), `Settings:Directory`, `Logging` | Instalador | Al reiniciar el servicio |
+| `settings/instrument.json` | `instrumentId` (Analizadores.a_id) | Front › Instrumento | En el acto (invalida la caché de mapeo) |
+| `settings/communication.json` | `transport` (`mode`, `host`, `port`, `reconnectSeconds`) y `astm` (`level`, checksum, timeouts, separadores) | Front › Comunicación | Al guardar se reinicia el puerto si estaba abierto |
+| `settings/result-mappings.json` | `mappings: [{ code, description }]` | Front › Mapeo de resultados (alta, edición, baja, borrar todo, CSV) | En el acto |
+| `settings/organisms.json` · `antibiotics.json` | `mappings: [{ code, description }]` | Front › Microbiología (igual que el mapeo de resultados) | En el acto |
+| *(LIS)* `AnalizadoresDet` | Mapeo de pruebas: entrante/saliente, prueba del LIS, factor, sufijo… | Front › Mapeo de tests, vía `labcore-api` | En el acto (invalida la caché de mapeo) |
+
+- `settings/` vive junto a `appsettings.json` (o donde diga `Settings:Directory`). Está fuera de
+  git y del publish: es de cada instalación, un redeploy no la pisa.
+- Si un archivo no existe se crea al arrancar. `instrument.json` y `communication.json` toman el
+  valor inicial de las secciones viejas `Labcore:InstrumentId`, `Transport` y `Astm` si todavía
+  están en `appsettings.json` (migración sin pasos manuales); `result-mappings.json` arranca con el
+  mapeo del adapter de Epicenter (`Configuration/Defaults/result-mappings.json`).
+- El guardado es atómico (temporal + reemplazo): un corte a mitad no deja un JSON roto.
+- `instrumentId` es obligatorio: sin él no se consulta el mapeo ni se cargan resultados.
 
 ## Plano de control y front
 
@@ -121,7 +139,11 @@ Synapsys por socket y expone un front React para operarlo. El puerto ASTM se abr
 | --- | --- | --- |
 | GET | `/api/status` | Estado del puerto (estado, modo, remoto, contadores, último error). |
 | POST | `/api/port/open` · `/close` · `/restart` | Controlan el puerto ASTM sin reiniciar el servicio. |
-| GET | `/api/mappings` | Mapeo de códigos (hoy mock; luego desde `labcore-api`). |
+| GET · PUT | `/api/settings/instrument` | Instrumento configurado. |
+| GET · PUT | `/api/settings/communication` | Transporte + ASTM. El PUT reinicia el puerto si estaba abierto. |
+| GET · POST · PUT · DELETE | `/api/settings/test-mappings` | Mapeo de pruebas del LIS (PUT/DELETE con `?incomingCode=`). |
+| GET · PUT · DELETE | `/api/settings/catalogs/{catalog}` | Catálogo `results`, `organisms` o `antibiotics` (PUT/DELETE con `?code=`; PUT sin `code` = alta). |
+| POST | `/api/settings/catalogs/{catalog}/clear` · `/import?replace=` | Borrar todos · importar CSV (`codigo;descripcion`). |
 | WS | `/ws/comms` | Comunicación ASTM cruda (RX/TX, hex + texto) en tiempo real. |
 | WS | `/ws/events` | Eventos semánticos (conexión, consulta, resultados, errores). |
 
@@ -131,8 +153,9 @@ Ambos WebSockets envían primero un buffer reciente al conectarse y luego el str
 
 Vite + React + TypeScript. `npm run build` compila a `src/Synapsys.Connector/wwwroot`, que Kestrel
 sirve como SPA. En desarrollo, `npm run dev` (puerto 5173) hace proxy de `/api` y `/ws` al servicio
-(`http://localhost:5081`). La UI muestra el panel de estado + controles, la tabla de mapeos y los
-dos monitores realtime.
+(`http://localhost:5081`). La UI tiene cuatro secciones: estado + controles del puerto, los dos monitores
+realtime, Settings (instrumento, comunicación, mapeo de tests y mapeo de resultados) y Microbiología
+(microorganismos y antibióticos).
 
 ## Puntos abiertos
 

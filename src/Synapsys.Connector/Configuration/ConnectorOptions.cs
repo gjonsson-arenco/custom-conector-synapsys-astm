@@ -1,8 +1,14 @@
+using System.Text.Json.Serialization;
+
 namespace Synapsys.Connector.Configuration;
 
-/// <summary>Como se establece el socket: escuchando (Server) o conectando (Client).</summary>
+/// <summary>
+/// Como se establece el socket: escuchando (Server) o conectando (Client).
+/// Vive en settings/communication.json (ver <see cref="CommunicationSettings"/>).
+/// </summary>
 public sealed class TransportOptions
 {
+    /// <summary>Seccion de appsettings.json de la que se toma el valor inicial al crear el archivo.</summary>
     public const string SectionName = "Transport";
 
     /// <summary>"Server" para escuchar en <see cref="Port"/>, "Client" para conectar a <see cref="Host"/>.</summary>
@@ -16,12 +22,17 @@ public sealed class TransportOptions
     /// <summary>Segundos antes de reintentar aceptar o reconectar cuando se cae el socket.</summary>
     public int ReconnectSeconds { get; set; } = 5;
 
+    [JsonIgnore]
     public bool IsClient => string.Equals(Mode, "Client", StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Parametros del protocolo ASTM. El nivel elige el canal.</summary>
+/// <summary>
+/// Parametros del protocolo ASTM. El nivel elige el canal.
+/// Vive en settings/communication.json (ver <see cref="CommunicationSettings"/>).
+/// </summary>
 public sealed class AstmOptions
 {
+    /// <summary>Seccion de appsettings.json de la que se toma el valor inicial al crear el archivo.</summary>
     public const string SectionName = "Astm";
 
     /// <summary>"LowLevel" (ENQ/ACK + frames con checksum) o "HighLevel" (mensaje completo VT..FS).</summary>
@@ -40,10 +51,14 @@ public sealed class AstmOptions
     public string ComponentSeparator { get; set; } = "^";
     public string RepeatSeparator { get; set; } = "\\";
 
+    [JsonIgnore]
     public bool IsHighLevel => string.Equals(Level, "HighLevel", StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Conexion con labcore-api: donde esta, como se autentica y con que identidad escribe.</summary>
+/// <summary>
+/// Conexion con labcore-api: donde esta, como se autentica y con que identidad escribe.
+/// El analizador no va aca: es un setting editable (settings/instrument.json).
+/// </summary>
 public sealed class LabcoreOptions
 {
     public const string SectionName = "Labcore";
@@ -56,9 +71,6 @@ public sealed class LabcoreOptions
 
     /// <summary>Usuario del LIS con el que se cargan los resultados (AppUsers.usr_id).</summary>
     public int UserId { get; set; } = 1;
-
-    /// <summary>Analizador (Analizadores.a_id): clave del mapeo de codigos y origen de los resultados.</summary>
-    public int InstrumentId { get; set; }
 
     /// <summary>Cada cuanto se refresca el mapeo de codigos que vive en el LIS.</summary>
     public int MappingRefreshMinutes { get; set; } = 30;

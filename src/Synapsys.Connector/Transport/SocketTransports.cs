@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Synapsys.Connector.Astm;
 using Synapsys.Connector.Configuration;
 
@@ -14,9 +13,9 @@ public sealed class SocketServerTransport : ITransport
     private readonly TransportOptions _options;
     private readonly ILogger<SocketServerTransport> _logger;
 
-    public SocketServerTransport(IOptions<TransportOptions> options, ILogger<SocketServerTransport> logger)
+    public SocketServerTransport(TransportOptions options, ILogger<SocketServerTransport> logger)
     {
-        _options = options.Value;
+        _options = options;
         _logger = logger;
     }
 
@@ -79,9 +78,9 @@ public sealed class SocketClientTransport : ITransport
     private readonly TransportOptions _options;
     private readonly ILogger<SocketClientTransport> _logger;
 
-    public SocketClientTransport(IOptions<TransportOptions> options, ILogger<SocketClientTransport> logger)
+    public SocketClientTransport(TransportOptions options, ILogger<SocketClientTransport> logger)
     {
-        _options = options.Value;
+        _options = options;
         _logger = logger;
     }
 

@@ -1,0 +1,952 @@
+{
+  "mappings": [
+    {
+      "code": "1",
+      "description": "0-1/Campo"
+    },
+    {
+      "code": "12",
+      "description": "1-2/Campo"
+    },
+    {
+      "code": "02",
+      "description": "0-2/Campo"
+    },
+    {
+      "code": "03",
+      "description": "3-5/Campo"
+    },
+    {
+      "code": "34",
+      "description": "3-4/Campo"
+    },
+    {
+      "code": "04",
+      "description": "4-6/Campo"
+    },
+    {
+      "code": "4",
+      "description": "2-4/Campo"
+    },
+    {
+      "code": "5",
+      "description": "5-10/Campo"
+    },
+    {
+      "code": "57",
+      "description": "5-7/campo"
+    },
+    {
+      "code": "8",
+      "description": "8-10/campo"
+    },
+    {
+      "code": "10",
+      "description": "10-15/Campo"
+    },
+    {
+      "code": "1025",
+      "description": "10-25/Campo"
+    },
+    {
+      "code": "15",
+      "description": "15-20/Campo"
+    },
+    {
+      "code": "1020",
+      "description": "10-20/Campo"
+    },
+    {
+      "code": "20",
+      "description": "20/Campo"
+    },
+    {
+      "code": "50",
+      "description": "50/ Campo"
+    },
+    {
+      "code": "103",
+      "description": "1000 UFC/ml"
+    },
+    {
+      "code": "104",
+      "description": "10.000 UFC/ml"
+    },
+    {
+      "code": "105",
+      "description": "> 100.000 UFC/ml"
+    },
+    {
+      "code": "106",
+      "description": "> 1.000.000 UFC/ml"
+    },
+    {
+      "code": ".",
+      "description": "."
+    },
+    {
+      "code": "<0.5",
+      "description": "< 0.5 NEGATIVO"
+    },
+    {
+      "code": "<1",
+      "description": "< 1 NEGATIVO"
+    },
+    {
+      "code": ">=0.5",
+      "description": ">=0.5 POSITIVO"
+    },
+    {
+      "code": ">=1",
+      "description": ">=1 POSITIVO"
+    },
+    {
+      "code": ">104",
+      "description": "> 10.000 UFC/ml"
+    },
+    {
+      "code": "AB",
+      "description": "Abundantes"
+    },
+    {
+      "code": "ABAM",
+      "description": "Se aisla Acinetobacter  spp multirresistente"
+    },
+    {
+      "code": "AUTO",
+      "description": "Resultado no interpretable (reacción no específica)"
+    },
+    {
+      "code": "AUR",
+      "description": "Acido úrico"
+    },
+    {
+      "code": "BLA",
+      "description": "Blando"
+    },
+    {
+      "code": "C0",
+      "description": "Negativo a la fecha"
+    },
+    {
+      "code": "C1",
+      "description": "Positivo  (Cocobacilos Gram negativo)"
+    },
+    {
+      "code": "C10",
+      "description": "Positivo (Cocos Gram Positivos en cadena)"
+    },
+    {
+      "code": "C11",
+      "description": "Positivo (Cocos Gram Positivos en grupo)"
+    },
+    {
+      "code": "C2",
+      "description": "Positivo (Bacilos Gram Negativo y Cocos Gram Positivos)"
+    },
+    {
+      "code": "C3",
+      "description": "Positivo (Bacilos Gram Negativos)"
+    },
+    {
+      "code": "C4",
+      "description": "Positivo (Bacilos Gram positivos)"
+    },
+    {
+      "code": "C5",
+      "description": "Positivo (Cocos Gram Positivos)"
+    },
+    {
+      "code": "C6",
+      "description": "Positivo (Diplococos Gram Negativos)"
+    },
+    {
+      "code": "C7",
+      "description": "Positivo (Levaduras y Bacilos Gram Negativos)"
+    },
+    {
+      "code": "C8",
+      "description": "Positivo (Levaduras y CocoscGram Positivos)"
+    },
+    {
+      "code": "C9",
+      "description": "Positivo (Levaduras)"
+    },
+    {
+      "code": "CAMO",
+      "description": "Cristales amorfos"
+    },
+    {
+      "code": "CC",
+      "description": "Campo cubierto"
+    },
+    {
+      "code": "CCL",
+      "description": "Se observan Clue Cells"
+    },
+    {
+      "code": "CEN",
+      "description": "Hifas cenocíticas"
+    },
+    {
+      "code": "CGRA",
+      "description": "Cilindros granulosos"
+    },
+    {
+      "code": "CHEM",
+      "description": "Cilindros hemáticos"
+    },
+    {
+      "code": "CHIA",
+      "description": "Cilindros hialinos"
+    },
+    {
+      "code": "CLEU",
+      "description": "Cilindros leucocitarios"
+    },
+    {
+      "code": "COL",
+      "description": "Colonización"
+    },
+    {
+      "code": "COLH",
+      "description": "Probable colonización de via aérea superior"
+    },
+    {
+      "code": "CONH",
+      "description": "Contaminado con  hongos ambientales"
+    },
+    {
+      "code": "CONT",
+      "description": "Contaminado"
+    },
+    {
+      "code": "CONTH",
+      "description": "Contaminado, si la clínica lo justifica se sugiere remitir nueva muestra"
+    },
+    {
+      "code": "COP",
+      "description": "Colonizacion piel"
+    },
+    {
+      "code": "CVAG",
+      "description": "Contaminación con flujo vaginal"
+    },
+    {
+      "code": "DER",
+      "description": "Derivado"
+    },
+    {
+      "code": "DF",
+      "description": "Demodex folliculorum"
+    },
+    {
+      "code": "DIA",
+      "description": "Diarreico"
+    },
+    {
+      "code": "DIS",
+      "description": "Disbacteriosis"
+    },
+    {
+      "code": "EI",
+      "description": "Estado intermedio de desbalance del contenido vaginal"
+    },
+    {
+      "code": "ELV",
+      "description": "Se observan elementos levaduriformes"
+    },
+    {
+      "code": "EP",
+      "description": "En proceso"
+    },
+    {
+      "code": "ES",
+      "description": "Escasos"
+    },
+    {
+      "code": "ESC",
+      "description": "Escasas"
+    },
+    {
+      "code": "ESCM",
+      "description": "Escaso Material"
+    },
+    {
+      "code": "ESCMU",
+      "description": "Escasa muestra"
+    },
+    {
+      "code": "FAMB",
+      "description": "Flora ambiental"
+    },
+    {
+      "code": "FH",
+      "description": "Flora habitual"
+    },
+    {
+      "code": "FHIA",
+      "description": "Filamentos hialinos"
+    },
+    {
+      "code": "FHL",
+      "description": "Flora habitual vaginal"
+    },
+    {
+      "code": "FOR",
+      "description": "Formado"
+    },
+    {
+      "code": "FPM",
+      "description": "Flora polimicrobiana"
+    },
+    {
+      "code": "FTRI",
+      "description": "Fosfatos triples"
+    },
+    {
+      "code": "G1",
+      "description": "Bacilos Gram positivos y levaduras"
+    },
+    {
+      "code": "G10",
+      "description": "Cocos Gram positivos en cadenas y en acúmulos"
+    },
+    {
+      "code": "G11",
+      "description": "Cocos Gram positivos en cadenas"
+    },
+    {
+      "code": "G12",
+      "description": "Diplococos Gram negativos"
+    },
+    {
+      "code": "G13",
+      "description": "Diplococos Gram positivos"
+    },
+    {
+      "code": "G14",
+      "description": "Flora mixta"
+    },
+    {
+      "code": "G15",
+      "description": "No se observan diplococos Gram negativos"
+    },
+    {
+      "code": "G16",
+      "description": "Bacilos Gram positivos y cocos Gram positivos"
+    },
+    {
+      "code": "G2",
+      "description": "Bacilos Gram negativos"
+    },
+    {
+      "code": "G3",
+      "description": "Bacilos Gram negativos y cocos Gram positivos"
+    },
+    {
+      "code": "G4",
+      "description": "Bacilos Gram positivos"
+    },
+    {
+      "code": "G5",
+      "description": "Bacilos Gram positivos en empalizada"
+    },
+    {
+      "code": "G6",
+      "description": "Cocobacilos Gram negativos y bacilos Gram positivos"
+    },
+    {
+      "code": "G7",
+      "description": "Cocobacilos Gram negativos"
+    },
+    {
+      "code": "G8",
+      "description": "Cocos Gram positivos"
+    },
+    {
+      "code": "G9",
+      "description": "Cocos Gram positivos en acúmulos"
+    },
+    {
+      "code": "HEP",
+      "description": "Hemoptoico"
+    },
+    {
+      "code": "HIA",
+      "description": "Hifas hialinas"
+    },
+    {
+      "code": "HIF",
+      "description": "Se observan hifas"
+    },
+    {
+      "code": "HIS",
+      "description": "Se observan levaduras compatibles con Histoplasma capsulatum"
+    },
+    {
+      "code": "ID",
+      "description": "Identificación presuntiva"
+    },
+    {
+      "code": "LIM",
+      "description": "Limpido"
+    },
+    {
+      "code": "LV",
+      "description": "Levaduras"
+    },
+    {
+      "code": "MA1",
+      "description": ">1% Células epiteliales escamosas"
+    },
+    {
+      "code": "MA100",
+      "description": ">100/ Campo"
+    },
+    {
+      "code": "MA25",
+      "description": ">25/ Campo"
+    },
+    {
+      "code": "MA5",
+      "description": ">5/ Campo"
+    },
+    {
+      "code": "MAL",
+      "description": "Levaduras compatibles con Malassezia sp"
+    },
+    {
+      "code": "MBB1",
+      "description": "Método de Bruin Buisson <100 col/ml"
+    },
+    {
+      "code": "MBB2",
+      "description": "Método de Bruin Buisson>100 col/ml"
+    },
+    {
+      "code": "MBB5",
+      "description": "Método de Bruin Buisson 0 col/ml"
+    },
+    {
+      "code": "ME1",
+      "description": "<1% Células epiteliales escamosas"
+    },
+    {
+      "code": "ME10",
+      "description": "<10/ Campo"
+    },
+    {
+      "code": "ME5",
+      "description": "<5/ Campo"
+    },
+    {
+      "code": "MINS",
+      "description": "Muestra insuficiente"
+    },
+    {
+      "code": "MN",
+      "description": "Manual negativo"
+    },
+    {
+      "code": "MNR",
+      "description": "Muestra no remitida"
+    },
+    {
+      "code": "MNRE",
+      "description": "Muestra no representativa"
+    },
+    {
+      "code": "MP",
+      "description": "Manual Positivo"
+    },
+    {
+      "code": "MRCH",
+      "description": "Muestra rechazada"
+    },
+    {
+      "code": "MUAB",
+      "description": "Mucus abundante"
+    },
+    {
+      "code": "MUC",
+      "description": "Mucoso"
+    },
+    {
+      "code": "MUES",
+      "description": "Mucus escaso"
+    },
+    {
+      "code": "MURE",
+      "description": "Mucus regular"
+    },
+    {
+      "code": "MUS",
+      "description": "Mucosalivoso"
+    },
+    {
+      "code": "N0",
+      "description": "0"
+    },
+    {
+      "code": "N1",
+      "description": "1"
+    },
+    {
+      "code": "N10",
+      "description": "10"
+    },
+    {
+      "code": "N2",
+      "description": "2"
+    },
+    {
+      "code": "N3",
+      "description": "3"
+    },
+    {
+      "code": "N4",
+      "description": "4"
+    },
+    {
+      "code": "N5",
+      "description": "5"
+    },
+    {
+      "code": "N6",
+      "description": "6"
+    },
+    {
+      "code": "N7",
+      "description": "7"
+    },
+    {
+      "code": "N8",
+      "description": "8"
+    },
+    {
+      "code": "N9",
+      "description": "9"
+    },
+    {
+      "code": "NB",
+      "description": "No se observan bacterias"
+    },
+    {
+      "code": "NBLEE",
+      "description": "No se aisla Enterobacterias productora de BLEE"
+    },
+    {
+      "code": "NBNCAR",
+      "description": "No se aisla Bacilo Gram negativo productor de Carbapenemasa"
+    },
+    {
+      "code": "NCAR",
+      "description": "No se aisla Enterobacterias productora de carbapenemasa"
+    },
+    {
+      "code": "NCAU",
+      "description": "No se aisla Candida auris"
+    },
+    {
+      "code": "CAU",
+      "description": "Se aisla Candida auris"
+    },
+    {
+      "code": "ND",
+      "description": "-"
+    },
+    {
+      "code": "NDE",
+      "description": "NO DETECTABLE"
+    },
+    {
+      "code": "NEGB",
+      "description": "NO SE OBTUVO DESARROLLO BACTERIANO"
+    },
+    {
+      "code": "NEG",
+      "description": "NEGATIVO"
+    },
+    {
+      "code": "NEGCN",
+      "description": "No se observan elementos compatibles con Cryptococcus neoformans"
+    },
+    {
+      "code": "NERV",
+      "description": "No se aisla Enterococo spp.resistente a Vancomicina"
+    },
+    {
+      "code": "NES",
+      "description": "No se observan espiroquetas compatibles con Treponema pallidum"
+    },
+    {
+      "code": "NFUN",
+      "description": "No se obtuvo desarrollo fúngico"
+    },
+    {
+      "code": "NH",
+      "description": "No se observan elementos fúngicos"
+    },
+    {
+      "code": "NNG",
+      "description": "No se aisla Neisseria gonorrhoeae"
+    },
+    {
+      "code": "NLEV",
+      "description": "No se aislan levaduras"
+    },
+    {
+      "code": "NO",
+      "description": "No se observan"
+    },
+    {
+      "code": "NOCAN",
+      "description": "Levadura, no Candida albicans, no Candida glabrata, no Candida krusei, no Candida tropicalis"
+    },
+    {
+      "code": "NOFU",
+      "description": "No se observan elementos fúngicos"
+    },
+    {
+      "code": "NOLV",
+      "description": "No se observan levaduras"
+    },
+    {
+      "code": "NPJ",
+      "description": "No se observan  elementos compatibles con Pneumocystis jiroveci"
+    },
+    {
+      "code": "NPJH",
+      "description": "No se observa Pneumocystis jiroveci ,ni elementos fúngicos"
+    },
+    {
+      "code": "NSEB",
+      "description": "No se aisla Estreptococo beta hemolítico grupo B"
+    },
+    {
+      "code": "NSSA",
+      "description": "No se aisla Samonella spp., Shigella spp. ni Aeromonas spp."
+    },
+    {
+      "code": "NSSAE",
+      "description": "No se aisla Samonella, Shigella , Aeromona ni E.coli enterohemorrágica O157"
+    },
+    {
+      "code": "NSTR",
+      "description": "No se aisla Stapylococcus aureus meticilino resistente"
+    },
+    {
+      "code": "NSAU",
+      "description": "No se aisla Staphylococcus aureus meticilino sensible. No se aisla Staphyloccus aureus meticilino resistente"
+    },
+    {
+      "code": "NTSE",
+      "description": "No se aisla Staphylococcus aureus meticilino resistente"
+    },
+    {
+      "code": "NTV",
+      "description": "No se observan Trichomonas vaginalis"
+    },
+    {
+      "code": "NZN",
+      "description": "No se observan BAAR"
+    },
+    {
+      "code": "ONG",
+      "description": "En curso"
+    },
+    {
+      "code": "OXCA",
+      "description": "Oxalatos de calcio"
+    },
+    {
+      "code": "PAEC",
+      "description": "Se aisla Pseudomonas aeruginosa productora de carbapenemasa"
+    },
+    {
+      "code": "PAEMBL",
+      "description": "Se aisla Pseudomonas aeruginosa productora de Metalobetalactamasa"
+    },
+    {
+      "code": "PBLEE",
+      "description": "Se aislan Enterobacterias productoras de BLEE"
+    },
+    {
+      "code": "PC",
+      "description": "Positivo confirmado"
+    },
+    {
+      "code": "PCAR",
+      "description": "Se aisla Enterobacteria productora de carbapenemasa"
+    },
+    {
+      "code": "PEN",
+      "description": "Pendiente"
+    },
+    {
+      "code": "PERV",
+      "description": "Se aisla Enterococo spp resistente a vancomicina"
+    },
+    {
+      "code": "PES",
+      "description": "Se observan espiroquetas compatibles con Treponema pallidum"
+    },
+    {
+      "code": "PH1",
+      "description": "3.0"
+    },
+    {
+      "code": "PH10",
+      "description": "7.5"
+    },
+    {
+      "code": "PH11",
+      "description": "8.0"
+    },
+    {
+      "code": "PH12",
+      "description": "8.5"
+    },
+    {
+      "code": "PH13",
+      "description": "9.0"
+    },
+    {
+      "code": "PH2",
+      "description": "3.5"
+    },
+    {
+      "code": "PH3",
+      "description": "4.0"
+    },
+    {
+      "code": "PH4",
+      "description": "4.5"
+    },
+    {
+      "code": "PH5",
+      "description": "5.0"
+    },
+    {
+      "code": "PH6",
+      "description": "5.5"
+    },
+    {
+      "code": "PH7",
+      "description": "6.0"
+    },
+    {
+      "code": "PH8",
+      "description": "6.5"
+    },
+    {
+      "code": "PH9",
+      "description": "7.0"
+    },
+    {
+      "code": "PIG",
+      "description": "Hifas pigmentadas"
+    },
+    {
+      "code": "PIOA",
+      "description": "Piocitos abundantes"
+    },
+    {
+      "code": "PIOE",
+      "description": "Piocitos escasos"
+    },
+    {
+      "code": "PIOR",
+      "description": "Piocitos regular cantidad"
+    },
+    {
+      "code": "PKPC",
+      "description": "Se aislan Enterobacterias productoras de KPC"
+    },
+    {
+      "code": "PMBL",
+      "description": "Se aisla Enterobacteria productora de Metalobetalactamasa"
+    },
+    {
+      "code": "PBGN",
+      "description": "Se aisla Bacilo Gram negativo productor de Carbapenemasa"
+    },
+    {
+      "code": "POS",
+      "description": "POSITIVO"
+    },
+    {
+      "code": "POSCN",
+      "description": "Se observan elementos compatibles con Cryptococcus neoformans"
+    },
+    {
+      "code": "POS1",
+      "description": "Micoplasma hominis <10.000 UCC. Colonización"
+    },
+    {
+      "code": "POS2",
+      "description": "Micoplasma hominis>10.000 UCC"
+    },
+    {
+      "code": "POS3",
+      "description": "Ureaplasma urealyticum<10.000 UCC. Colonización"
+    },
+    {
+      "code": "POS4",
+      "description": "Ureaplasma urealyticum>10.000 UCC"
+    },
+    {
+      "code": "POS5",
+      "description": "Micoplasma hominis>10.000 UCC Ureaplasma urealyticum<10.000 UCC"
+    },
+    {
+      "code": "POS6",
+      "description": "Micoplasma hominis>10.000 UCC Ureaplasma urealyticum>10.0000 UCC"
+    },
+    {
+      "code": "POS7",
+      "description": "Micoplasma hominis<10.000 UCC Ureaplasma urealyticum<10.000 UCC"
+    },
+    {
+      "code": "POS8",
+      "description": "Micoplasma hominis<10.000 UCC Ureaplasma urealyticum>10.000  UCC"
+    },
+    {
+      "code": "POSTX1",
+      "description": "Se detecta Stx1"
+    },
+    {
+      "code": "POSTX2",
+      "description": "Se detecta Stx2"
+    },
+    {
+      "code": "POST12",
+      "description": "Se detecta Stx1 y Stx2"
+    },
+    {
+      "code": "PPJ",
+      "description": "Se observan elementos compatibles con Pneumocystis jiroveci"
+    },
+    {
+      "code": "PSTR",
+      "description": "Se aisla Staphylococcus aureus meticilino resistente"
+    },
+    {
+      "code": "PSTS",
+      "description": "Se aisla Staphylococcus aureus meticilino sensible"
+    },
+    {
+      "code": "PTV",
+      "description": "Se observan Trichomonas vaginalis"
+    },
+    {
+      "code": "PUR",
+      "description": "Purulento"
+    },
+    {
+      "code": "PYN",
+      "description": "Llama la atención directo positivo con cultivo negativo"
+    },
+    {
+      "code": "R1",
+      "description": "(100-1.000) UFC/ml"
+    },
+    {
+      "code": "R2",
+      "description": "(1.000-10.000) UFC/ml"
+    },
+    {
+      "code": "R3",
+      "description": "(10.000-100.000) UFC/ml"
+    },
+    {
+      "code": "RG",
+      "description": "Regular cantidad"
+    },
+    {
+      "code": "SAL",
+      "description": "Salivoso"
+    },
+    {
+      "code": "SAN",
+      "description": "Sanguinolento"
+    },
+    {
+      "code": "SEM",
+      "description": "Semiforme"
+    },
+    {
+      "code": "SFU",
+      "description": "Se observan filamentos fúngicos"
+    },
+    {
+      "code": "SLV",
+      "description": "Se observan levaduras"
+    },
+    {
+      "code": "SPOS",
+      "description": "Screening positivo"
+    },
+    {
+      "code": "STEC",
+      "description": "No se detecta Escherichia coli productora de toxina Shiga"
+    },
+    {
+      "code": "STX",
+      "description": "No se detecta toxina Shiga  libre en materia fecal"
+    },
+    {
+      "code": "TAB",
+      "description": "Hifas hialinas tabicadas"
+    },
+    {
+      "code": "TNAN",
+      "description": "Toxina AB negativo/Antígeno negativo"
+    },
+    {
+      "code": "TNAP",
+      "description": "Toxina AB negativo/Antígeno positivo"
+    },
+    {
+      "code": "TPAN",
+      "description": "Toxina AB positivo/Antígeno negativo"
+    },
+    {
+      "code": "TPAP",
+      "description": "Toxina AB positivo/Antígeno positivo"
+    },
+    {
+      "code": "TUR",
+      "description": "Turbio"
+    },
+    {
+      "code": "TVLV",
+      "description": "Se observan Trichomonas vaginalis y levaduras"
+    },
+    {
+      "code": "VAS",
+      "description": "Flora de vías aéreas superiores"
+    },
+    {
+      "code": "VB",
+      "description": "Vaginosis bacteriana"
+    },
+    {
+      "code": "VEN",
+      "description": "No se detecta Escherichia coli productora de toxina Shiga ni toxina Shiga libre en materia fecal"
+    },
+    {
+      "code": "ZNP1",
+      "description": "Positivo (+) Se observan menos de 1 BAAR por campo en 100 campos observados"
+    },
+    {
+      "code": "ZNP2",
+      "description": "Positivo (++)  Se observan 1 a 10 BAAR por campo en 50 campos observados"
+    },
+    {
+      "code": "ZNP3",
+      "description": "Positivo (+++)  Se observan mas de 10 BAAR por campo en 20 campos observados"
+    }
+  ]
+}

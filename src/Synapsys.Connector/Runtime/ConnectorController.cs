@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Synapsys.Connector.Astm;
 using Synapsys.Connector.Configuration;
 using Synapsys.Connector.Flows;
@@ -19,7 +18,7 @@ public sealed class ConnectorController : IAsyncDisposable
     private readonly AstmChannelFactory _channelFactory;
     private readonly TransmissionRouter _router;
     private readonly IConnectorMonitor _monitor;
-    private readonly IOptionsMonitor<TransportOptions> _transportOptions;
+    private readonly SettingsFile<CommunicationSettings> _communication;
     private readonly ILogger<ConnectorController> _logger;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -27,6 +26,9 @@ public sealed class ConnectorController : IAsyncDisposable
     private Task? _loop;
 
     private volatile PortState _state = PortState.Stopped;
+
+    // Configuracion con la que se abrio el puerto; los cambios guardados despues aplican al reabrir.
+    private CommunicationSettings? _active;
     private string? _remote;
     private DateTimeOffset? _startedAt;
     private long _received;
@@ -38,14 +40,14 @@ public sealed class ConnectorController : IAsyncDisposable
         AstmChannelFactory channelFactory,
         TransmissionRouter router,
         IConnectorMonitor monitor,
-        IOptionsMonitor<TransportOptions> transportOptions,
+        SettingsFile<CommunicationSettings> communication,
         ILogger<ConnectorController> logger)
     {
         _transportFactory = transportFactory;
         _channelFactory = channelFactory;
         _router = router;
         _monitor = monitor;
-        _transportOptions = transportOptions;
+        _communication = communication;
         _logger = logger;
     }
 
@@ -53,7 +55,7 @@ public sealed class ConnectorController : IAsyncDisposable
     {
         get
         {
-            var options = _transportOptions.CurrentValue;
+            var options = (_active ?? _communication.Current).Transport;
             return new ConnectorStatus(
                 _state,
                 options.Mode,
@@ -78,10 +80,12 @@ public sealed class ConnectorController : IAsyncDisposable
             }
 
             _cts = new CancellationTokenSource();
+            _active = _communication.Current;
             _lastError = null;
             _startedAt = DateTimeOffset.UtcNow;
             SetState(PortState.Starting);
-            _loop = Task.Run(() => RunAsync(_cts.Token), CancellationToken.None);
+            var settings = _active;
+            _loop = Task.Run(() => RunAsync(settings, _cts.Token), CancellationToken.None);
         }
         finally
         {
@@ -128,6 +132,7 @@ public sealed class ConnectorController : IAsyncDisposable
         cts.Dispose();
         _remote = null;
         _startedAt = null;
+        _active = null;
         SetState(PortState.Stopped);
         _monitor.PublishEvent(ConnectorEvent.Info("port.closed", "Puerto cerrado."));
     }
@@ -138,9 +143,12 @@ public sealed class ConnectorController : IAsyncDisposable
         await OpenAsync();
     }
 
-    private async Task RunAsync(CancellationToken cancellationToken)
+    /// <summary>Si el puerto esta abierto (o intentando abrirse).</summary>
+    public bool IsOpen => _loop is { IsCompleted: false };
+
+    private async Task RunAsync(CommunicationSettings settings, CancellationToken cancellationToken)
     {
-        var options = _transportOptions.CurrentValue;
+        var options = settings.Transport;
 
         try
         {
@@ -149,7 +157,7 @@ public sealed class ConnectorController : IAsyncDisposable
                 "port.open",
                 $"Puerto abierto en modo {options.Mode} ({options.Host}:{options.Port})."));
 
-            var transport = _transportFactory.Create();
+            var transport = _transportFactory.Create(options);
 
             await foreach (var connection in transport.ConnectionsAsync(cancellationToken))
             {
@@ -161,7 +169,7 @@ public sealed class ConnectorController : IAsyncDisposable
 
                 try
                 {
-                    await RunSessionAsync(monitored, cancellationToken);
+                    await RunSessionAsync(monitored, settings.Astm, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -197,9 +205,10 @@ public sealed class ConnectorController : IAsyncDisposable
         }
     }
 
-    private async Task RunSessionAsync(IAstmConnection connection, CancellationToken cancellationToken)
+    private async Task RunSessionAsync(IAstmConnection connection, AstmOptions astm, CancellationToken cancellationToken)
     {
-        var channel = _channelFactory.Create(connection);
+        var separators = AstmChannelFactory.SeparatorsFor(astm);
+        var channel = _channelFactory.Create(connection, astm, separators);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -217,7 +226,7 @@ public sealed class ConnectorController : IAsyncDisposable
             Interlocked.Increment(ref _received);
             _monitor.PublishEvent(DescribeTransmission(incoming));
 
-            var response = await _router.RouteAsync(incoming, _channelFactory.Separators, cancellationToken);
+            var response = await _router.RouteAsync(incoming, separators, cancellationToken);
 
             if (response is { Count: > 0 })
             {
