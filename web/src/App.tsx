@@ -160,6 +160,10 @@ export default function App() {
           </View>
         </main>
       </div>
+
+      <footer className="footer">
+        © {new Date().getFullYear()} arenco-it. All rights reserved. · Developed by arenco-it
+      </footer>
     </div>
   );
 }
