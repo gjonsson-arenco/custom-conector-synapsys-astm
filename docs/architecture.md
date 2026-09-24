@@ -152,6 +152,31 @@ sequenceDiagram
 - **Códigos sin catálogo** se informan tal cual (`PSEAER`) y quedan en el log, para no perder el aislado.
 - **Retención.** Un tubo sin novedades en `Cultures:RetentionDays` (120) se olvida.
 
+### Autovalidación
+
+Los resultados simples (negativos, recuentos) se pueden guardar ya validados. La decisión es del
+conector, antes de mandar el resultado: labcore-api solo recibe `status = 4` y el motivo. Hacen falta
+las dos cosas: la prueba con la autovalidación habilitada en el mapeo de tests del LIS
+(`autovalidationEnabled`, se edita en Mapeo de tests) y una regla que la acepte.
+
+| Regla | Ejemplo |
+| --- | --- |
+| Prueba del LIS (`p_codigo`, la del mapeo de tests) | `CGR` |
+| Tipo de muestra (vacío = cualquiera) | `HEMI` |
+| Valor tal cual lo manda el equipo, antes del mapeo de resultados y del factor | `NEGB` |
+
+- **Qué pasa en el LIS.** `l_estado = 4`, `l_fecha_val` y `l_usr_id_val` (el usuario del conector),
+  y en `AppLog`, además de la carga, una fila "Autovalidacion: CGR en HEMI = NEGB"
+  (`al_ope_id` = `Lis:Defaults:AutoValidationLogOperationId` de labcore-api).
+- **Tipo de muestra.** Se pide a `GET /samples/{barcode}` una vez por tubo y solo si alguna regla que
+  coincide lo exige. Si no se puede leer, esas reglas no aplican y el resultado queda cargado.
+- **Cuándo no.** Apagada, prueba sin la autovalidación habilitada en el LIS, sin regla que coincida en todo, con flags del equipo, o un cultivo que ya
+  tiene aislados. Esos van como siempre (`status = 2`).
+- **Cultivos.** Se evalúa el estado (GND) mientras el cultivo no tenga aislados. Una vez validado,
+  el LIS no deja pisarlo: si después llegan aislados de ese tubo, labcore-api los rechaza y quedan
+  en el log (y en `data/cultures`). Conviene reservar las reglas de cultivo para estados finales.
+- Cada autovalidación queda en el log y en el monitor de eventos (`result.autovalidated`).
+
 ## Estructura y responsabilidades
 
 | Carpeta / archivo | Responsabilidad |
@@ -196,7 +221,7 @@ sequenceDiagram
 | `Flows/AstmValues.cs` | Helpers para leer identificadores y armar los registros de respuesta. |
 | **`Lis/`** | Frontera con el LIS (mapeo + HTTP encapsulados). |
 | `Lis/ILisGateway.cs` | Contrato en términos de dominio: `GetOrdersAsync` / `SaveResultsAsync` / `SaveCultureAsync`. Los flows no saben de HTTP ni de mapeo. |
-| `Lis/LabcoreGateway.cs` | Implementación contra `labcore-api`: cachea el mapeo de códigos (`GET /instruments/{id}/tests`), traduce resultados codificados o aplica factor, traduce en ambos sentidos y arma el cultivo con los catálogos. |
+| `Lis/LabcoreGateway.cs` | Implementación contra `labcore-api`: cachea el mapeo de códigos (`GET /instruments/{id}/tests`), traduce resultados codificados o aplica factor, traduce en ambos sentidos, arma el cultivo con los catálogos y aplica las reglas de autovalidación. |
 | `Lis/LabcoreTestMappings.cs` | Lectura y edición del mapeo de pruebas del LIS vía `labcore-api` (`GET/POST/PUT/DELETE /instruments/{id}/tests`). Cada escritura invalida la caché del gateway. |
 | `Lis/LabcorePetitions.cs` | `ILisPetitions`: la cola de peticiones del analizador vía `labcore-api` (`/instruments/{id}/petitions`: pendientes, listado, resumen, cambio de estado). |
 
@@ -225,6 +250,7 @@ Se separa lo que es **de despliegue** (lo toca quien instala) de lo que es **ope
 | `settings/instrument.json` | `instrumentId` (Analizadores.a_id) | Front › Instrumento | En el acto (invalida la caché de mapeo) |
 | `settings/communication.json` | `transport` (`mode`, `host`, `port`, `reconnectSeconds`) y `astm` (`level`, checksum, timeouts, separadores) | Front › Comunicación | Al guardar se reinicia el puerto si estaba abierto |
 | `settings/petitions.json` | `enabled` (apagado por defecto), `pollSeconds` (10) | Front › Peticiones | En el acto |
+| `settings/autovalidation.json` | `enabled` (apagado por defecto), `rules: [{ testCode, sampleType, result }]` | Front › Autovalidacion | En el acto |
 | `settings/result-mappings.json` | `mappings: [{ code, description }]` | Front › Mapeo de resultados (alta, edición, baja, borrar todo, CSV) | En el acto |
 | `settings/organisms.json` · `antibiotics.json` | `mappings: [{ code, description }]` | Front › Microbiología (igual que el mapeo de resultados) | En el acto |
 | *(LIS)* `AnalizadoresDet` | Mapeo de pruebas: entrante/saliente, prueba del LIS, factor, sufijo… | Front › Mapeo de tests, vía `labcore-api` | En el acto (invalida la caché de mapeo) |

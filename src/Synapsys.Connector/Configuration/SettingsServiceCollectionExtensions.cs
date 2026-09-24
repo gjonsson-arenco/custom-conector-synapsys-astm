@@ -42,6 +42,8 @@ public static class SettingsServiceCollectionExtensions
 
         services.AddSettingsFile(directory, "petitions.json", () => new PetitionSettings());
 
+        services.AddSettingsFile(directory, "autovalidation.json", () => new AutoValidationSettings());
+
         services.AddSingleton(provider => new CodeCatalogs(
             Catalog(provider, directory, "result-mappings.json", LoadDefaultResultMappings),
             Catalog(provider, directory, "organisms.json", () => new CodeCatalogSettings()),

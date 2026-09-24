@@ -9,7 +9,7 @@ using Synapsys.Connector.Runtime;
 namespace Synapsys.Connector.Web;
 
 /// <summary>
-/// Settings editables desde el front. Instrumento, comunicacion, peticiones y catalogos (resultados,
+/// Settings editables desde el front. Instrumento, comunicacion, peticiones, autovalidacion y catalogos (resultados,
 /// microorganismos, antibioticos) se guardan en settings/*.json; el mapeo de pruebas vive en el
 /// LIS y se edita a traves de labcore-api.
 /// </summary>
@@ -67,6 +67,21 @@ public static class SettingsEndpoints
 
         // Aplica en el acto: el pulling lee el setting en cada silencio de la linea.
         settings.MapPut("/petitions", async (PetitionSettings value, SettingsFile<PetitionSettings> file, CancellationToken cancellationToken) =>
+        {
+            var errors = value.Validate();
+            if (errors.Count > 0)
+            {
+                return Results.ValidationProblem(errors);
+            }
+
+            await file.SaveAsync(value, cancellationToken);
+            return Results.Ok(value);
+        });
+
+        settings.MapGet("/autovalidation", (SettingsFile<AutoValidationSettings> file) => Results.Ok(file.Current));
+
+        // Aplica en el acto: las reglas se leen en cada resultado que llega.
+        settings.MapPut("/autovalidation", async (AutoValidationSettings value, SettingsFile<AutoValidationSettings> file, CancellationToken cancellationToken) =>
         {
             var errors = value.Validate();
             if (errors.Count > 0)

@@ -73,6 +73,68 @@ public sealed record PetitionSettings
             : new() { ["pollSeconds"] = ["Tiene que estar entre 1 y 3600 segundos."] };
 }
 
+/// <summary>
+/// settings/autovalidation.json: los resultados simples (negativos, recuentos) que se guardan ya
+/// validados. El conector evalua las reglas antes de mandar el resultado al LIS.
+/// </summary>
+public sealed record AutoValidationSettings
+{
+    /// <summary>Apagado por defecto: nada se valida solo hasta que alguien lo prenda.</summary>
+    public bool Enabled { get; init; }
+
+    public IReadOnlyList<AutoValidationRule> Rules { get; init; } = [];
+
+    public Dictionary<string, string[]> Validate()
+    {
+        var errors = new Dictionary<string, string[]>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var index = 0; index < Rules.Count; index++)
+        {
+            var rule = Rules[index];
+
+            if (string.IsNullOrWhiteSpace(rule.TestCode) || string.IsNullOrWhiteSpace(rule.Result))
+            {
+                errors[$"rules[{index}]"] = ["La prueba y el resultado son obligatorios."];
+            }
+            else if (!seen.Add(rule.Describe()))
+            {
+                errors[$"rules[{index}]"] = [$"La regla {rule.Describe()} esta repetida."];
+            }
+        }
+
+        return errors;
+    }
+}
+
+/// <summary>
+/// Una regla: si la prueba del LIS, en ese tipo de muestra, trae ese resultado, se autovalida.
+/// </summary>
+/// <param name="TestCode">Codigo de la prueba en el LIS (Pruebas.p_codigo), el del mapeo de tests.</param>
+/// <param name="SampleType">Codigo del tipo de muestra (HEMI...). Vacio = cualquiera.</param>
+/// <param name="Result">
+/// Valor tal cual lo manda el equipo, antes del mapeo de resultados y del factor: G8, NEGB, 0.
+/// En un cultivo es el codigo del estado.
+/// </param>
+public sealed record AutoValidationRule(string TestCode, string? SampleType, string Result)
+{
+    [JsonIgnore]
+    public bool NeedsSampleType => !string.IsNullOrWhiteSpace(SampleType);
+
+    public bool Matches(string testCode, string result) =>
+        Same(TestCode, testCode) && Same(Result, result);
+
+    public bool AcceptsSample(string? sampleType) => !NeedsSampleType || Same(SampleType, sampleType);
+
+    /// <summary>Como queda escrita en la bitacora del LIS: "CGR en HEMI = G8".</summary>
+    public string Describe() => NeedsSampleType
+        ? $"{TestCode.Trim()} en {SampleType!.Trim()} = {Result.Trim()}"
+        : $"{TestCode.Trim()} = {Result.Trim()}";
+
+    private static bool Same(string? left, string? right) =>
+        string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+}
+
 /// <summary>Traduccion de un codigo que manda el equipo a su texto para el LIS.</summary>
 public sealed record CodeMapping(string Code, string Description);
 

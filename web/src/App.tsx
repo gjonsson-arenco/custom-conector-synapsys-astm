@@ -7,6 +7,7 @@ import { CatalogView } from "./components/CatalogView";
 import { CommsMonitor } from "./components/CommsMonitor";
 import { EventsMonitor } from "./components/EventsMonitor";
 import { PetitionsView } from "./components/PetitionsView";
+import { AutoValidationView } from "./components/AutoValidationView";
 
 type ViewId =
   | "status"
@@ -16,6 +17,7 @@ type ViewId =
   | "communication"
   | "test-mappings"
   | "result-mappings"
+  | "autovalidation"
   | "organisms"
   | "antibiotics";
 
@@ -39,7 +41,8 @@ const NAV: NavGroup[] = [
       { id: "instrument", label: "Instrumento" },
       { id: "communication", label: "Comunicacion" },
       { id: "test-mappings", label: "Mapeo de tests" },
-      { id: "result-mappings", label: "Mapeo de resultados" }
+      { id: "result-mappings", label: "Mapeo de resultados" },
+      { id: "autovalidation", label: "Autovalidacion" }
     ]
   },
   {
@@ -122,6 +125,9 @@ export default function App() {
               fileName="result-mappings.json"
               hint="Si el valor que manda el equipo coincide con un codigo, al LIS se informa la descripcion. Tambien traduce el estado de los cultivos (C3, NEGB...)."
             />
+          </View>
+          <View active={view === "autovalidation"}>
+            <AutoValidationView />
           </View>
           <View active={view === "organisms"}>
             <CatalogView

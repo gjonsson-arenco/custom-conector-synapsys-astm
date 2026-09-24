@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Synapsys.Connector.Configuration;
+using Synapsys.Connector.Monitoring;
 
 namespace Synapsys.Connector.Lis;
 
@@ -12,7 +13,8 @@ namespace Synapsys.Connector.Lis;
 /// Implementacion de <see cref="ILisGateway"/> contra labcore-api. Cachea el mapeo de codigos
 /// que vive en el LIS (GET /instruments/{id}/tests) y lo aplica en las dos direcciones. Antes de
 /// informar un resultado lo traduce con el mapeo de resultados (settings/result-mappings.json); los
-/// cultivos, ademas, con los catalogos de microorganismos y antibioticos.
+/// cultivos, ademas, con los catalogos de microorganismos y antibioticos. Si una regla de
+/// autovalidacion (settings/autovalidation.json) acepta el resultado, va ya validado.
 /// </summary>
 public sealed class LabcoreGateway : ILisGateway
 {
@@ -22,6 +24,8 @@ public sealed class LabcoreGateway : ILisGateway
     private readonly LabcoreOptions _options;
     private readonly SettingsFile<InstrumentSettings> _instrument;
     private readonly CodeCatalogs _catalogs;
+    private readonly SettingsFile<AutoValidationSettings> _autoValidation;
+    private readonly IConnectorMonitor _monitor;
     private readonly ILogger<LabcoreGateway> _logger;
 
     private readonly SemaphoreSlim _mappingGate = new(1, 1);
@@ -34,12 +38,16 @@ public sealed class LabcoreGateway : ILisGateway
         IOptions<LabcoreOptions> options,
         SettingsFile<InstrumentSettings> instrument,
         CodeCatalogs catalogs,
+        SettingsFile<AutoValidationSettings> autoValidation,
+        IConnectorMonitor monitor,
         ILogger<LabcoreGateway> logger)
     {
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _instrument = instrument;
         _catalogs = catalogs;
+        _autoValidation = autoValidation;
+        _monitor = monitor;
         _logger = logger;
 
         // Otro analizador es otro mapeo.
@@ -81,6 +89,7 @@ public sealed class LabcoreGateway : ILisGateway
     {
         var mapping = await GetMappingAsync(cancellationToken);
         var payload = new List<SaveTestResultDto>();
+        var sampleType = new SampleTypeLookup(this, barcode, cancellationToken);
 
         foreach (var result in results)
         {
@@ -90,11 +99,14 @@ public sealed class LabcoreGateway : ILisGateway
                 continue;
             }
 
+            var rule = await FindAutoValidationAsync(barcode, map, result.Value, result.Flags, sampleType);
+
             payload.Add(new SaveTestResultDto
             {
                 TestCode = map.TestCode,
                 Result = _catalogs.Results.Translate(result.Value) ?? ApplyFactor(result.Value, map.Factor),
-                Status = 2,
+                Status = rule is null ? LoadedStatus : ValidatedStatus,
+                AutoValidation = rule?.Describe(),
                 Flags = result.Flags
             });
         }
@@ -126,6 +138,7 @@ public sealed class LabcoreGateway : ILisGateway
         }
 
         _logger.LogInformation("Se enviaron {Count} resultados del tubo {Barcode} al LIS.", payload.Count, barcode);
+        PublishAutoValidated(barcode, payload.Where(row => row.AutoValidation is not null).Select(row => row.AutoValidation!));
     }
 
     public async Task SaveCultureAsync(CultureReport culture, CancellationToken cancellationToken)
@@ -138,6 +151,13 @@ public sealed class LabcoreGateway : ILisGateway
             return;
         }
 
+        // Solo el estado: un cultivo con aislados (antibiograma) no es un resultado simple.
+        var rule = culture.StatusCode is not null && culture.Isolates.Count == 0
+            ? await FindAutoValidationAsync(
+                culture.Barcode, map, culture.StatusCode, [],
+                new SampleTypeLookup(this, culture.Barcode, cancellationToken))
+            : null;
+
         var request = new SaveCultureDto
         {
             UserId = _options.UserId,
@@ -145,6 +165,8 @@ public sealed class LabcoreGateway : ILisGateway
             // Cada envio es el informe completo: siempre reemplaza al anterior.
             Overwrite = true,
             TestCode = map.TestCode,
+            Status = rule is null ? LoadedStatus : ValidatedStatus,
+            AutoValidation = rule?.Describe(),
             Summary = culture.StatusCode is null ? null : Translate(_catalogs.Results, culture.StatusCode, "resultado", culture),
             Isolates = culture.Isolates
                 .Select(isolate => new CultureIsolateDto
@@ -179,6 +201,99 @@ public sealed class LabcoreGateway : ILisGateway
 
         _logger.LogInformation("Se informo el cultivo {Test} del tubo {Barcode} al LIS: {Isolates} aislados.",
             map.TestCode, culture.Barcode, culture.Isolates.Count);
+
+        if (rule is not null)
+        {
+            PublishAutoValidated(culture.Barcode, [rule.Describe()]);
+        }
+    }
+
+    /// <summary>
+    /// La regla de autovalidacion que acepta el resultado, o <c>null</c> si se guarda como cargado.
+    /// Hace falta que la prueba tenga la autovalidacion habilitada en el mapeo del LIS y que una
+    /// regla la acepte. El tipo de muestra se le pide al LIS solo si alguna regla candidata lo exige.
+    /// </summary>
+    private async Task<AutoValidationRule?> FindAutoValidationAsync(
+        string barcode,
+        TestMap map,
+        string value,
+        IReadOnlyList<string> flags,
+        SampleTypeLookup sampleType)
+    {
+        var settings = _autoValidation.Current;
+        if (!settings.Enabled)
+        {
+            return null;
+        }
+
+        var testCode = map.TestCode;
+        var candidates = settings.Rules.Where(rule => rule.Matches(testCode, value)).ToList();
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        // El LIS tiene la ultima palabra: sin la autovalidacion habilitada en el mapeo, la regla no alcanza.
+        if (!map.AutovalidationEnabled)
+        {
+            _logger.LogInformation("{Test} = {Value} del tubo {Barcode} no se autovalida: la prueba no tiene la autovalidacion habilitada en el mapeo del LIS.",
+                testCode, value, barcode);
+            return null;
+        }
+
+        // Con flags del equipo el resultado ya no es "simple": lo mira una persona.
+        if (flags.Any(flag => !string.IsNullOrWhiteSpace(flag)))
+        {
+            _logger.LogInformation("{Test} = {Value} del tubo {Barcode} no se autovalida: el equipo lo informo con flags ({Flags}).",
+                testCode, value, barcode, string.Join(",", flags));
+            return null;
+        }
+
+        var type = candidates.Any(rule => rule.NeedsSampleType) ? await sampleType.GetAsync() : null;
+
+        return candidates.FirstOrDefault(rule => rule.AcceptsSample(type));
+    }
+
+    private void PublishAutoValidated(string barcode, IEnumerable<string> rules)
+    {
+        foreach (var rule in rules)
+        {
+            _logger.LogInformation("Tubo {Barcode}: autovalidado por la regla {Rule}.", barcode, rule);
+            _monitor.PublishEvent(ConnectorEvent.Info("result.autovalidated", $"Tubo {barcode}: autovalidado ({rule})."));
+        }
+    }
+
+    /// <summary>Tipo de muestra del tubo segun el LIS. Si no se puede saber, no se autovalida por tipo.</summary>
+    private async Task<string?> GetSampleTypeAsync(string barcode, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var http = _httpClientFactory.CreateClient("labcore");
+            using var response = await http.GetAsync($"samples/{Uri.EscapeDataString(barcode)}", cancellationToken);
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+
+            response.EnsureSuccessStatusCode();
+
+            var sample = await response.Content.ReadFromJsonAsync<SampleDto>(Json, cancellationToken);
+            return sample?.SampleTypeCode?.Trim();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
+        {
+            _logger.LogWarning(ex, "No se pudo leer el tipo de muestra del tubo {Barcode}: no se autovalida por tipo de muestra.", barcode);
+            return null;
+        }
+    }
+
+    /// <summary>El tipo de muestra se pide una sola vez por tubo, y solo si hace falta.</summary>
+    private sealed class SampleTypeLookup(LabcoreGateway gateway, string barcode, CancellationToken cancellationToken)
+    {
+        private Task<string?>? _sampleType;
+
+        public Task<string?> GetAsync() => _sampleType ??= gateway.GetSampleTypeAsync(barcode, cancellationToken);
     }
 
     /// <summary>
@@ -239,7 +354,7 @@ public sealed class LabcoreGateway : ILisGateway
 
                 if (!string.IsNullOrWhiteSpace(test.IncomingCode))
                 {
-                    byIncoming[test.IncomingCode.Trim()] = new TestMap(testCode, test.Factor ?? 1d);
+                    byIncoming[test.IncomingCode.Trim()] = new TestMap(testCode, test.Factor ?? 1d, test.AutovalidationEnabled ?? false);
                 }
 
                 if (!string.IsNullOrWhiteSpace(test.OutgoingCode))
@@ -279,19 +394,25 @@ public sealed class LabcoreGateway : ILisGateway
         return value;
     }
 
-    private readonly record struct TestMap(string TestCode, double Factor);
+    /// <summary>Laboratorios.l_estado: cargado, pendiente de validacion.</summary>
+    private const short LoadedStatus = 2;
+
+    /// <summary>Laboratorios.l_estado: validado. labcore-api sella la fecha y el usuario de validacion.</summary>
+    private const short ValidatedStatus = 4;
+
+    private readonly record struct TestMap(string TestCode, double Factor, bool AutovalidationEnabled);
 
     private readonly record struct Mapping(
         IReadOnlyDictionary<string, TestMap> ByIncoming,
         IReadOnlyDictionary<string, string> OutgoingByTest);
 
-    private sealed record SampleDto(IReadOnlyList<SampleTestDto>? Tests);
+    private sealed record SampleDto(string? SampleTypeCode, IReadOnlyList<SampleTestDto>? Tests);
 
     private sealed record SampleTestDto(string? TestCode, string? Status);
 
     private sealed record InstrumentTestsDto(IReadOnlyList<MappedTestDto>? Tests);
 
-    private sealed record MappedTestDto(string? TestCode, string? IncomingCode, string? OutgoingCode, double? Factor);
+    private sealed record MappedTestDto(string? TestCode, string? IncomingCode, string? OutgoingCode, double? Factor, bool? AutovalidationEnabled);
 
     private sealed class SaveResultsDto
     {
@@ -307,6 +428,8 @@ public sealed class LabcoreGateway : ILisGateway
         public int InstrumentId { get; init; }
         public bool Overwrite { get; init; }
         public string? TestCode { get; init; }
+        public short Status { get; init; } = LoadedStatus;
+        public string? AutoValidation { get; init; }
         public string? Summary { get; init; }
         public IReadOnlyList<CultureIsolateDto> Isolates { get; init; } = [];
     }
@@ -330,7 +453,8 @@ public sealed class LabcoreGateway : ILisGateway
     {
         public string? TestCode { get; init; }
         public string? Result { get; init; }
-        public short Status { get; init; } = 2;
+        public short Status { get; init; } = LoadedStatus;
+        public string? AutoValidation { get; init; }
         public IReadOnlyList<string> Flags { get; init; } = [];
     }
 }

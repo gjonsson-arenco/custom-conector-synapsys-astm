@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using Synapsys.Connector.Configuration;
 using Synapsys.Connector.Lis;
+using Synapsys.Connector.Monitoring;
 
 namespace Synapsys.Connector.Tests;
 
@@ -45,6 +46,8 @@ public sealed class LabcoreGatewayCultureTests : IDisposable
                 Catalog("results.json", ("C3", "Positivo (Bacilos Gram Negativos)")),
                 Catalog("organisms.json", ("PSEAER", "Pseudomonas aeruginosa")),
                 Catalog("antibiotics.json", ("ATM", "Aztreonam"))),
+            new SettingsFile<AutoValidationSettings>(Path.Combine(_directory, "autovalidation.json"), () => new AutoValidationSettings(), NullLogger.Instance),
+            new ConnectorMonitor(),
             NullLogger<LabcoreGateway>.Instance);
     }
 

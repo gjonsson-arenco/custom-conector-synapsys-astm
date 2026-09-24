@@ -61,6 +61,19 @@ export interface PetitionSettings {
   pollSeconds: number;
 }
 
+/** Una regla de autovalidacion: prueba del LIS + tipo de muestra (vacio = cualquiera) + valor del equipo. */
+export interface AutoValidationRule {
+  testCode: string;
+  sampleType: string | null;
+  result: string;
+}
+
+/** settings/autovalidation.json. */
+export interface AutoValidationSettings {
+  enabled: boolean;
+  rules: AutoValidationRule[];
+}
+
 export type PetitionStatus = "Pending" | "Processed" | "Discarded" | "Error";
 
 /** Una peticion de InstrumentPetitionQueue: una muestra que el LIS pide mandar al equipo. */
@@ -177,6 +190,9 @@ export const api = {
 
   getPetitionSettings: () => fetch("/api/settings/petitions").then(json<PetitionSettings>),
   savePetitionSettings: (value: PetitionSettings) => send<PetitionSettings>("/api/settings/petitions", "PUT", value),
+  getAutoValidation: () => fetch("/api/settings/autovalidation").then(json<AutoValidationSettings>),
+  saveAutoValidation: (value: AutoValidationSettings) =>
+    send<AutoValidationSettings>("/api/settings/autovalidation", "PUT", value),
   getPetitionsStatus: () => fetch("/api/petitions/status").then(json<PetitionsStatus>),
   getPetitions: (filter: PetitionFilter) => {
     const params = new URLSearchParams();
