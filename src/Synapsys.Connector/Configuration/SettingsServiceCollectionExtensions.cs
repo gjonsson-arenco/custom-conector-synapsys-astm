@@ -40,6 +40,8 @@ public static class SettingsServiceCollectionExtensions
             Astm = configuration.GetSection(AstmOptions.SectionName).Get<AstmOptions>() ?? new()
         });
 
+        services.AddSettingsFile(directory, "petitions.json", () => new PetitionSettings());
+
         services.AddSingleton(provider => new CodeCatalogs(
             Catalog(provider, directory, "result-mappings.json", LoadDefaultResultMappings),
             Catalog(provider, directory, "organisms.json", () => new CodeCatalogSettings()),

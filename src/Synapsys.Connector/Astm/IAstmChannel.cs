@@ -24,6 +24,23 @@ public interface IAstmChannel
     /// </summary>
     Task<IReadOnlyList<AstmRecord>?> ReceiveAsync(CancellationToken cancellationToken);
 
-    /// <summary>Envia una transmision. <c>true</c> si el otro extremo la acepto.</summary>
-    Task<bool> SendAsync(IReadOnlyList<AstmRecord> records, CancellationToken cancellationToken);
+    /// <summary>Envia una transmision y dice como termino.</summary>
+    Task<SendOutcome> SendAsync(IReadOnlyList<AstmRecord> records, CancellationToken cancellationToken);
+}
+
+/// <summary>Como termino un envio.</summary>
+public enum SendOutcome
+{
+    /// <summary>El otro extremo acepto la transmision completa.</summary>
+    Sent,
+
+    /// <summary>
+    /// El otro extremo pidio la linea al mismo tiempo (colision de ENQ) y se le cedio. No se
+    /// mando nada: el proximo <see cref="IAstmChannel.ReceiveAsync"/> le contesta ACK y recibe lo
+    /// suyo; lo nuestro se reintenta despues.
+    /// </summary>
+    Contention,
+
+    /// <summary>El otro extremo no acepto el establecimiento o algun frame, o no contesto a tiempo.</summary>
+    Failed
 }

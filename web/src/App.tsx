@@ -6,10 +6,12 @@ import { TestMappingsView } from "./components/TestMappingsView";
 import { CatalogView } from "./components/CatalogView";
 import { CommsMonitor } from "./components/CommsMonitor";
 import { EventsMonitor } from "./components/EventsMonitor";
+import { PetitionsView } from "./components/PetitionsView";
 
 type ViewId =
   | "status"
   | "monitor"
+  | "petitions"
   | "instrument"
   | "communication"
   | "test-mappings"
@@ -24,7 +26,13 @@ interface NavGroup {
 
 const NAV: NavGroup[] = [
   { items: [{ id: "status", label: "Estado" }] },
-  { title: "Monitoreo", items: [{ id: "monitor", label: "Comunicacion y eventos" }] },
+  {
+    title: "Monitoreo",
+    items: [
+      { id: "monitor", label: "Comunicacion y eventos" },
+      { id: "petitions", label: "Peticiones" }
+    ]
+  },
   {
     title: "Settings",
     items: [
@@ -94,6 +102,9 @@ export default function App() {
               <CommsMonitor />
               <EventsMonitor />
             </div>
+          </View>
+          <View active={view === "petitions"}>
+            <PetitionsView />
           </View>
           <View active={view === "instrument"}>
             <InstrumentSettingsView />

@@ -8,6 +8,10 @@ namespace Synapsys.Connector.Astm;
 /// ASTM low-level (E1381): establecimiento con ENQ/ACK, frames con checksum y cierre con EOT.
 /// El otro extremo es mandante: ante una colision de ENQ cedemos y volvemos a recibir.
 /// </summary>
+/// <remarks>
+/// En la colision el ENQ del otro extremo ya se leyo: el proximo <see cref="ReceiveAsync"/> lo
+/// toma como recibido y contesta ACK en el acto, sin esperar otro.
+/// </remarks>
 public sealed class LowLevelChannel : IAstmChannel
 {
     private readonly IAstmConnection _connection;
@@ -15,6 +19,9 @@ public sealed class LowLevelChannel : IAstmChannel
     private readonly AstmSeparators _separators;
     private readonly ILogger _logger;
     private readonly TimeSpan _timeout;
+
+    // El otro extremo pidio la linea mientras mandabamos nuestro ENQ.
+    private bool _peerEnquired;
 
     public LowLevelChannel(IAstmConnection connection, AstmOptions options, AstmSeparators separators, ILogger logger)
     {
@@ -28,7 +35,7 @@ public sealed class LowLevelChannel : IAstmChannel
     public async Task<IReadOnlyList<AstmRecord>?> ReceiveAsync(CancellationToken cancellationToken)
     {
         // Espera indefinida al ENQ del otro extremo: aca no metemos timeout.
-        while (true)
+        while (!_peerEnquired)
         {
             var first = await _connection.ReadByteAsync(cancellationToken);
             if (first < 0)
@@ -49,6 +56,7 @@ public sealed class LowLevelChannel : IAstmChannel
             _logger.LogDebug("Descartado {Char} mientras esperaba <ENQ>.", ControlChars.Describe(first));
         }
 
+        _peerEnquired = false;
         await WriteAsync(ControlChars.ACK, cancellationToken);
 
         var buffer = new StringBuilder();
@@ -106,7 +114,7 @@ public sealed class LowLevelChannel : IAstmChannel
         return SplitRecords(buffer.ToString());
     }
 
-    public async Task<bool> SendAsync(IReadOnlyList<AstmRecord> records, CancellationToken cancellationToken)
+    public async Task<SendOutcome> SendAsync(IReadOnlyList<AstmRecord> records, CancellationToken cancellationToken)
     {
         try
         {
@@ -116,13 +124,14 @@ public sealed class LowLevelChannel : IAstmChannel
             if (response == ControlChars.ENQ)
             {
                 _logger.LogInformation("Colision de <ENQ>: cede el conector, el otro extremo es mandante.");
-                return false;
+                _peerEnquired = true;
+                return SendOutcome.Contention;
             }
 
             if (response != ControlChars.ACK)
             {
                 _logger.LogWarning("El otro extremo no acepto el establecimiento: {Char}.", ControlChars.Describe(response));
-                return false;
+                return SendOutcome.Failed;
             }
 
             var number = 1;
@@ -150,17 +159,17 @@ public sealed class LowLevelChannel : IAstmChannel
 
                     _logger.LogWarning("Envio abortado tras {Char}.", ControlChars.Describe(response));
                     await WriteAsync(ControlChars.EOT, cancellationToken);
-                    return false;
+                    return SendOutcome.Failed;
                 }
             }
 
             await WriteAsync(ControlChars.EOT, cancellationToken);
-            return true;
+            return SendOutcome.Sent;
         }
         catch (TimeoutException)
         {
             _logger.LogWarning("Timeout enviando la transmision.");
-            return false;
+            return SendOutcome.Failed;
         }
     }
 

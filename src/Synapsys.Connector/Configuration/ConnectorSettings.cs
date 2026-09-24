@@ -55,6 +55,24 @@ public sealed record CommunicationSettings
     }
 }
 
+/// <summary>
+/// settings/petitions.json: pulling de peticiones. El LIS deja en InstrumentPetitionQueue las
+/// muestras que hay que mandar al equipo; el conector las toma y las baja con la linea libre.
+/// </summary>
+public sealed record PetitionSettings
+{
+    /// <summary>Apagado por defecto: una instalacion existente no empieza a bajar muestras sola.</summary>
+    public bool Enabled { get; init; }
+
+    /// <summary>Cada cuanto se consulta la tabla cuando no hay nada pendiente.</summary>
+    public int PollSeconds { get; init; } = 10;
+
+    public Dictionary<string, string[]> Validate() =>
+        PollSeconds is >= 1 and <= 3600
+            ? []
+            : new() { ["pollSeconds"] = ["Tiene que estar entre 1 y 3600 segundos."] };
+}
+
 /// <summary>Traduccion de un codigo que manda el equipo a su texto para el LIS.</summary>
 public sealed record CodeMapping(string Code, string Description);
 

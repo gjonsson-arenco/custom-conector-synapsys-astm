@@ -55,6 +55,53 @@ export interface CommunicationSettings {
   };
 }
 
+/** settings/petitions.json: pulling de peticiones del LIS. */
+export interface PetitionSettings {
+  enabled: boolean;
+  pollSeconds: number;
+}
+
+export type PetitionStatus = "Pending" | "Processed" | "Discarded" | "Error";
+
+/** Una peticion de InstrumentPetitionQueue: una muestra que el LIS pide mandar al equipo. */
+export interface Petition {
+  id: number;
+  sampleId: number;
+  barcode: string | null;
+  orderNumber: string | null;
+  createdAt: string | null;
+  status: PetitionStatus | string;
+  error: string | null;
+  petitionType: string | null;
+}
+
+export interface PetitionsStatus {
+  outbox: {
+    enabled: boolean;
+    pollSeconds: number;
+    lastPollAt: string | null;
+    lastSentAt: string | null;
+    sent: number;
+    lastError: string | null;
+  };
+  connected: boolean;
+  summary: {
+    pending: number;
+    processed: number;
+    discarded: number;
+    error: number;
+    oldestPendingAt: string | null;
+  } | null;
+  summaryError: string | null;
+}
+
+export interface PetitionFilter {
+  status?: PetitionStatus;
+  barcode?: string;
+  beforeId?: number;
+  top?: number;
+}
+
 /** Catalogos codigo => descripcion que administra el conector (settings/*.json). */
 export type CatalogName = "results" | "organisms" | "antibiotics";
 
@@ -127,6 +174,19 @@ export const api = {
   getCommunication: () => fetch("/api/settings/communication").then(json<CommunicationSettings>),
   saveCommunication: (value: CommunicationSettings) =>
     send<{ settings: CommunicationSettings; restarted: boolean }>("/api/settings/communication", "PUT", value),
+
+  getPetitionSettings: () => fetch("/api/settings/petitions").then(json<PetitionSettings>),
+  savePetitionSettings: (value: PetitionSettings) => send<PetitionSettings>("/api/settings/petitions", "PUT", value),
+  getPetitionsStatus: () => fetch("/api/petitions/status").then(json<PetitionsStatus>),
+  getPetitions: (filter: PetitionFilter) => {
+    const params = new URLSearchParams();
+    Object.entries(filter).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") params.set(key, String(value));
+    });
+    const query = params.toString();
+    return fetch(`/api/petitions${query ? `?${query}` : ""}`).then(json<Petition[]>);
+  },
+  reprocessPetitions: (ids: number[]) => send<void>("/api/petitions/reprocess", "POST", { ids }),
 
   getTestMappings: () => fetch("/api/settings/test-mappings").then(json<InstrumentTestMappings>),
   createTestMapping: (value: TestMapping) => send<void>("/api/settings/test-mappings", "POST", value),

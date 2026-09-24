@@ -3,6 +3,7 @@ using Synapsys.Connector.Astm;
 using Synapsys.Connector.Configuration;
 using Synapsys.Connector.Flows;
 using Synapsys.Connector.Monitoring;
+using Synapsys.Connector.Petitions;
 using Synapsys.Connector.Transport;
 
 namespace Synapsys.Connector.Runtime;
@@ -12,12 +13,20 @@ namespace Synapsys.Connector.Runtime;
 /// bucle de sesiones (recibir -> rutear -> responder) que antes vivia en el worker, ahora
 /// arrancable/parable desde el front. Cada transmision y cada byte alimentan el monitor.
 /// </summary>
+/// <remarks>
+/// Con la linea en silencio la sesion le da el turno al <see cref="PetitionOutbox"/> para bajar
+/// las muestras que pide el LIS. El equipo tiene prioridad: si empieza a hablar, se lo atiende.
+/// </remarks>
 public sealed class ConnectorController : IAsyncDisposable
 {
+    /// <summary>Silencio en la linea a partir del cual se considera desocupada.</summary>
+    private static readonly TimeSpan IdleWindow = TimeSpan.FromSeconds(2);
+
     private readonly TransportFactory _transportFactory;
     private readonly AstmChannelFactory _channelFactory;
     private readonly TransmissionRouter _router;
     private readonly IConnectorMonitor _monitor;
+    private readonly PetitionOutbox _petitions;
     private readonly SettingsFile<CommunicationSettings> _communication;
     private readonly ILogger<ConnectorController> _logger;
 
@@ -40,6 +49,7 @@ public sealed class ConnectorController : IAsyncDisposable
         AstmChannelFactory channelFactory,
         TransmissionRouter router,
         IConnectorMonitor monitor,
+        PetitionOutbox petitions,
         SettingsFile<CommunicationSettings> communication,
         ILogger<ConnectorController> logger)
     {
@@ -47,6 +57,7 @@ public sealed class ConnectorController : IAsyncDisposable
         _channelFactory = channelFactory;
         _router = router;
         _monitor = monitor;
+        _petitions = petitions;
         _communication = communication;
         _logger = logger;
     }
@@ -208,10 +219,22 @@ public sealed class ConnectorController : IAsyncDisposable
     private async Task RunSessionAsync(IAstmConnection connection, AstmOptions astm, CancellationToken cancellationToken)
     {
         var separators = AstmChannelFactory.SeparatorsFor(astm);
-        var channel = _channelFactory.Create(connection, astm, separators);
+        var line = new IdleAwareConnection(connection, cancellationToken);
+        var channel = _channelFactory.Create(line, astm, separators);
+
+        // Sesion nueva: lo que se habia leido de la tabla se vuelve a leer.
+        _petitions.Reset();
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            // Linea libre: turno de las peticiones. Si Synapsys pidio la linea al mismo tiempo
+            // (colision de ENQ), tiene prioridad: se lo recibe ya y la peticion espera al proximo silencio.
+            if (!await line.WaitForDataAsync(IdleWindow, cancellationToken) &&
+                await SendPetitionAsync(line, channel, separators, cancellationToken) != SendOutcome.Contention)
+            {
+                continue;
+            }
+
             var incoming = await channel.ReceiveAsync(cancellationToken);
             if (incoming is null)
             {
@@ -235,6 +258,25 @@ public sealed class ConnectorController : IAsyncDisposable
                 _monitor.PublishEvent(ConnectorEvent.Info("astm.sent", $"Respuesta enviada ({response.Count} registros)."));
             }
         }
+    }
+
+    /// <summary>
+    /// Turno de las peticiones con la linea libre. Armar el mensaje lleva idas al LIS; si mientras
+    /// tanto el equipo empezo a hablar, no se manda: queda para el proximo silencio.
+    /// </summary>
+    /// <returns>Como termino el envio; <c>null</c> si no se mando nada.</returns>
+    private async Task<SendOutcome?> SendPetitionAsync(IdleAwareConnection line, IAstmChannel channel, AstmSeparators separators, CancellationToken cancellationToken)
+    {
+        var outgoing = await _petitions.PrepareAsync(separators, cancellationToken);
+
+        if (outgoing is null || line.HasData)
+        {
+            return null;
+        }
+
+        var outcome = await channel.SendAsync(outgoing.Records, cancellationToken);
+        await _petitions.CompleteAsync(outgoing, outcome, cancellationToken);
+        return outcome;
     }
 
     private static ConnectorEvent DescribeTransmission(IReadOnlyList<AstmRecord> records)

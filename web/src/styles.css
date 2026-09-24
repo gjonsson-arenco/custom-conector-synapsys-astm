@@ -538,3 +538,78 @@ button.link.danger {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+
+/* Peticiones */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.danger-text {
+  color: var(--err);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.warning {
+  color: var(--warn);
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  border-radius: 0;
+  background: none;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--border);
+}
+
+.segmented button.active {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+.segmented .count {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.table td.reason {
+  max-width: 420px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.load-more {
+  justify-content: center;
+  margin-top: 12px;
+}

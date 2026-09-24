@@ -47,19 +47,7 @@ public sealed class QueryFlow
             return NegativeQuery(separators);
         }
 
-        var order = AstmRecord.Create('O', separators)
-            .Set(2, "1")
-            .Set(3, barcode)
-            .Set(5, string.Join(separators.Repeat, orders.InstrumentCodes.Select(code => $"{separators.Component}{separators.Component}{separators.Component}{code}")))
-            .Set(6, "R");
-
-        return
-        [
-            AstmValues.Header(separators),
-            AstmRecord.Create('P', separators).Set(2, "1"),
-            order,
-            AstmValues.Terminator(separators)
-        ];
+        return AstmValues.Orders(orders, separators);
     }
 
     private static IReadOnlyList<AstmRecord> NegativeQuery(AstmSeparators separators) =>

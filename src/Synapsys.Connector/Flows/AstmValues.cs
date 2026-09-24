@@ -1,4 +1,5 @@
 using Synapsys.Connector.Astm;
+using Synapsys.Connector.Lis;
 
 namespace Synapsys.Connector.Flows;
 
@@ -35,6 +36,29 @@ internal static class AstmValues
             .Set(12, "P")
             .Set(13, "E1394-97")
             .Set(14, DateTime.Now.ToString("yyyyMMddHHmmss"));
+
+    /// <summary>
+    /// Las ordenes de un tubo: H/P/O/L con las pruebas en codigos del instrumento. Es la respuesta
+    /// a una host query y tambien lo que se baja por una peticion del LIS.
+    /// </summary>
+    public static IReadOnlyList<AstmRecord> Orders(SampleOrders orders, AstmSeparators separators)
+    {
+        var prefix = new string(separators.Component, 3);
+
+        var order = AstmRecord.Create('O', separators)
+            .Set(2, "1")
+            .Set(3, orders.Barcode)
+            .Set(5, string.Join(separators.Repeat, orders.InstrumentCodes.Select(code => prefix + code)))
+            .Set(6, "R");
+
+        return
+        [
+            Header(separators),
+            AstmRecord.Create('P', separators).Set(2, "1"),
+            order,
+            Terminator(separators)
+        ];
+    }
 
     /// <summary>Terminador L normal.</summary>
     public static AstmRecord Terminator(AstmSeparators separators) =>

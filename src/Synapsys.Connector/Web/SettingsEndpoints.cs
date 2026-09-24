@@ -9,7 +9,7 @@ using Synapsys.Connector.Runtime;
 namespace Synapsys.Connector.Web;
 
 /// <summary>
-/// Settings editables desde el front. Instrumento, comunicacion y catalogos (resultados,
+/// Settings editables desde el front. Instrumento, comunicacion, peticiones y catalogos (resultados,
 /// microorganismos, antibioticos) se guardan en settings/*.json; el mapeo de pruebas vive en el
 /// LIS y se edita a traves de labcore-api.
 /// </summary>
@@ -61,6 +61,21 @@ public static class SettingsEndpoints
             }
 
             return Results.Ok(new { settings = value, restarted });
+        });
+
+        settings.MapGet("/petitions", (SettingsFile<PetitionSettings> file) => Results.Ok(file.Current));
+
+        // Aplica en el acto: el pulling lee el setting en cada silencio de la linea.
+        settings.MapPut("/petitions", async (PetitionSettings value, SettingsFile<PetitionSettings> file, CancellationToken cancellationToken) =>
+        {
+            var errors = value.Validate();
+            if (errors.Count > 0)
+            {
+                return Results.ValidationProblem(errors);
+            }
+
+            await file.SaveAsync(value, cancellationToken);
+            return Results.Ok(value);
         });
 
         MapTestMappings(settings.MapGroup("/test-mappings"));
@@ -146,7 +161,7 @@ public static class SettingsEndpoints
             : Results.Problem($"No existe el catalogo {name}.", statusCode: StatusCodes.Status404NotFound);
 
     /// <summary>Devuelve al front el mismo error que dio labcore-api, o 502 si no se pudo llegar.</summary>
-    private static async Task<IResult> CallLisAsync(Func<Task<IResult>> call)
+    internal static async Task<IResult> CallLisAsync(Func<Task<IResult>> call)
     {
         try
         {

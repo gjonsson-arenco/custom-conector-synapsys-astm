@@ -2,7 +2,8 @@
 
 Conector entre **Synapsys** (analizador que habla ASTM por socket) y **Labcore**
 (LIS, se accede por `labcore-api` HTTP). Synapsys es **mandante**: el conector escucha y
-reacciona; solo emite como respuesta a una consulta.
+reacciona. Por iniciativa propia solo baja las muestras que pide el LIS (peticiones), y solo con
+la línea desocupada.
 
 ## Vista general
 
@@ -17,7 +18,11 @@ flowchart LR
     RF --> CS[CultureStore]
     Q --> G[ILisGateway]
     RF --> G
+    W -->|línea libre| PO[PetitionOutbox]
+    PO --> G
+    PO --> P[ILisPetitions]
     G -->|HTTP| L[labcore-api]
+    P -->|HTTP| L
     W -.eventos.-> M[ConnectorMonitor]
     C -.bytes.-> M
     M -->|WebSocket| F[Front React]
@@ -63,6 +68,57 @@ La prueba está en el `O`:
 
 Un `R` de otra categoría bajo un `O` común se toma con su propio código, como cualquier equipo ASTM.
 
+### Peticiones (el LIS pide bajar una muestra al equipo)
+
+El LIS deja en `InstrumentPetitionQueue` una fila por muestra a enviar (`Reference` = `mo_id`,
+`InstrumentExternalCode` = `a_id` del analizador). Es la misma tabla que leía el adapter de HUA;
+la diferencia es que el adapter borraba la fila y el conector le cambia el estado.
+
+```mermaid
+sequenceDiagram
+    participant S as Synapsys
+    participant C as Connector
+    participant L as labcore-api
+    Note over S,C: 2 s sin bytes en la línea = desocupada
+    C->>L: GET /instruments/{id}/petitions/pending
+    L-->>C: peticiones (id, mo_id, barcode)
+    C->>L: GET /samples/{barcode}
+    C->>C: TestCode → OutgoingCode (mapeo)
+    C->>S: ENQ … H/P/O/L … EOT (si el equipo sigue callado)
+    S-->>C: ACK por frame
+    C->>L: PUT /instruments/{id}/petitions/status (Processed)
+```
+
+- **Sin colas ni servicios aparte.** La tabla es la cola. La sesión ASTM, cuando la línea queda 2 s
+  en silencio, le da el turno al `PetitionOutbox`: lee pendientes (de la más vieja a la más nueva),
+  arma el mismo mensaje H/P/O/L que la respuesta a una query y lo manda. Lo leído se guarda en
+  memoria solo para no consultar la tabla en cada silencio; sin pendientes, se vuelve a consultar
+  cada `pollSeconds`.
+- **Query o peticiones automáticas.** Son dos modos distintos y conviven: una instalación con
+  host query deja el pulling apagado y Synapsys pregunta por cada tubo (la respuesta sale en el
+  acto, es lo que Synapsys queda esperando); otra lo prende y el conector baja las muestras solo.
+- **El equipo tiene prioridad.** Si Synapsys empieza a hablar mientras se arma el mensaje, no se
+  manda: se lo atiende y se reintenta en el próximo silencio. Si contesta nuestro `ENQ` con el suyo
+  (colisión), el conector cede: le responde `ACK` en el acto, recibe y procesa lo que manda
+  (por ejemplo, responde su query) y recién después reintenta la petición, sin gastar un intento.
+  La conexión mantiene una sola lectura en curso contra el socket (`IdleAwareConnection`), así
+  saber si hay bytes no consume ninguno.
+- **El estado se cambia después del envío**, cuando el equipo aceptó la transmisión completa. Un
+  reinicio en el medio vuelve a mandar la muestra (llega dos veces) pero nunca la pierde. Si
+  `labcore-api` no contesta al marcar, se reintenta la marca, no el envío.
+- **Duplicados.** Varias pendientes de la misma muestra van en un solo envío y se marcan juntas.
+
+| Estado | En la tabla | Cuándo |
+| --- | --- | --- |
+| `Pending` | `Status` y `Error` en `NULL` | La generó el LIS o se reprocesó. |
+| `Processed` | `Status = 'Processed'` | Synapsys aceptó la muestra. |
+| `Discarded` | `Status = 'Discarded'`, motivo en `Error` | No había nada que mandar: la muestra no existe o no tiene pruebas pendientes. |
+| `Error` | `Status = 'Error'`, motivo en `Error` | El equipo la rechazó 3 veces, o 3 veces no se pudieron leer sus pruebas. No frena a las siguientes. |
+
+Si `labcore-api` está caída no cambia nada: todo queda pendiente y se reintenta. Sin Synapsys
+conectado no se consulta la tabla. Desde el front se ve cuántas hay en cada estado, la lista, y se
+reprocesa cualquiera (vuelve a `Pending`).
+
 ### Cultivos (microbiología)
 
 El LIS no tiene modelo de microbiología: el cultivo se guarda como **texto tabulado** en la prueba
@@ -101,7 +157,7 @@ sequenceDiagram
 | Carpeta / archivo | Responsabilidad |
 | --- | --- |
 | `Program.cs` | Composición de dependencias (DI), configuración web (Kestrel) y arranque del host. |
-| `Runtime/ConnectorController.cs` | Ciclo de vida del puerto ASTM: abrir/cerrar/reiniciar y estado. Corre el bucle de sesiones (recibir → rutear → responder) y alimenta el monitor. |
+| `Runtime/ConnectorController.cs` | Ciclo de vida del puerto ASTM: abrir/cerrar/reiniciar y estado. Corre el bucle de sesiones (recibir → rutear → responder; con la línea libre, turno de las peticiones) y alimenta el monitor. |
 | `Runtime/ConnectorBootstrap.cs` | Hosted service: abre el puerto al iniciar el servicio y lo cierra al apagarse. |
 | `Runtime/TransportFactory.cs` | Crea un transporte nuevo (Server/Client) en cada apertura del puerto. |
 | **`Monitoring/`** | Observabilidad realtime que consume el front. |
@@ -109,7 +165,8 @@ sequenceDiagram
 | `Monitoring/MonitoredConnection.cs` | Decora la conexión ASTM para publicar los bytes RX/TX al monitor. |
 | **`Web/`** | Plano de control HTTP. |
 | `Web/ConnectorEndpoints.cs` | REST (`/api/status`, `/api/port/*`) y WebSockets (`/ws/comms`, `/ws/events`). |
-| `Web/SettingsEndpoints.cs` | REST de settings (`/api/settings/*`): instrumento, comunicacion, mapeo de tests y catálogos. |
+| `Web/SettingsEndpoints.cs` | REST de settings (`/api/settings/*`): instrumento, comunicacion, peticiones, mapeo de tests y catálogos. |
+| `Web/PetitionEndpoints.cs` | REST de peticiones (`/api/petitions/*`): estado del envío + resumen del LIS, listado y reproceso. |
 | **`Configuration/`** | Opciones de despliegue (appsettings) y settings editables (settings/*.json). |
 | `Configuration/SettingsFile.cs` | Un archivo JSON de settings: lectura al arrancar, guardado atomico y aviso de cambio. |
 | `Configuration/ConnectorSettings.cs` | Modelos y validacion de `instrument.json`, `communication.json` y de los catálogos. |
@@ -122,7 +179,8 @@ sequenceDiagram
 | `Astm/ControlChars.cs` | Bytes de control (ENQ/ACK/NAK/EOT/STX/ETX/…) y codec Latin1. |
 | `Astm/Frame.cs` | Arma/parsea un frame low-level con checksum y numeración 0–7. |
 | `Astm/AstmRecord.cs` | Un registro (H/P/O/R/Q/C/L): parseo y armado por campos/componentes. |
-| `Astm/IAstmChannel.cs` | Contrato de conversación: `ReceiveAsync` / `SendAsync` en términos de registros. |
+| `Astm/IAstmChannel.cs` | Contrato de conversación: `ReceiveAsync` / `SendAsync` en términos de registros. `SendAsync` dice si se envió, si hubo colisión o si falló. |
+| `Astm/IdleAwareConnection.cs` | Una sola lectura en curso contra el socket: permite esperar silencio sin consumir bytes, y los timeouts no cancelan lecturas. |
 | `Astm/LowLevelChannel.cs` | ENQ/ACK/NAK/EOT + frames con checksum. Ante colisión de ENQ **cede** (Synapsys es mandante). |
 | `Astm/HighLevelChannel.cs` | Transmisión completa envuelta en `VT … FS CR`, sin handshake. |
 | `Astm/AstmChannelFactory.cs` | Construye el canal (low/high) según configuración y expone los separadores. |
@@ -131,6 +189,8 @@ sequenceDiagram
 | `Flows/QueryFlow.cs` | Extrae el código de barras del `Q`, consulta el LIS y arma la respuesta `H/P/O/L` (o query negativa). |
 | `Flows/ResultsParser.cs` | Decodifica los `O`/`R` de Synapsys por categoría: resultados simples, estado de cultivo y aislados. |
 | `Flows/ResultsFlow.cs` | Guarda los resultados simples por tubo y pasa los de cultivo por el `CultureStore`. |
+| **`Petitions/`** | Pulling de peticiones del LIS. |
+| `Petitions/PetitionOutbox.cs` | Toma las pendientes, arma el mensaje y decide el estado según cómo terminó el envío (procesada, descartada, error o pendiente). |
 | **`Microbiology/`** | Estado de los cultivos en curso. |
 | `Microbiology/CultureStore.cs` | Acumula estado y aislados de cada cultivo por tubo y devuelve el informe completo de los que cambiaron. |
 | `Flows/AstmValues.cs` | Helpers para leer identificadores y armar los registros de respuesta. |
@@ -138,11 +198,13 @@ sequenceDiagram
 | `Lis/ILisGateway.cs` | Contrato en términos de dominio: `GetOrdersAsync` / `SaveResultsAsync` / `SaveCultureAsync`. Los flows no saben de HTTP ni de mapeo. |
 | `Lis/LabcoreGateway.cs` | Implementación contra `labcore-api`: cachea el mapeo de códigos (`GET /instruments/{id}/tests`), traduce resultados codificados o aplica factor, traduce en ambos sentidos y arma el cultivo con los catálogos. |
 | `Lis/LabcoreTestMappings.cs` | Lectura y edición del mapeo de pruebas del LIS vía `labcore-api` (`GET/POST/PUT/DELETE /instruments/{id}/tests`). Cada escritura invalida la caché del gateway. |
+| `Lis/LabcorePetitions.cs` | `ILisPetitions`: la cola de peticiones del analizador vía `labcore-api` (`/instruments/{id}/petitions`: pendientes, listado, resumen, cambio de estado). |
 
 ## Decisiones de diseño
 
 - **Synapsys es mandante.** El conector queda a la escucha; solo inicia un envío para
-  responder una consulta y, si hay colisión de `ENQ`, cede.
+  responder una consulta o, con la línea desocupada, para bajar una petición del LIS. Si hay
+  colisión de `ENQ`, cede: contesta `ACK` al `ENQ` de Synapsys y recibe lo suyo primero.
 - **Nivel ASTM configurable.** `LowLevel` (framing + checksum + handshake) o `HighLevel`
   (mensaje completo). El resto del código no cambia: ambos implementan `IAstmChannel`.
 - **Transporte configurable.** `Server` o `Client` detrás de `ITransport`; el protocolo no
@@ -162,6 +224,7 @@ Se separa lo que es **de despliegue** (lo toca quien instala) de lo que es **ope
 | `appsettings.json` | `Urls`, `Labcore` (`BaseUrl`, `ApiKey`, `UserId`, `MappingRefreshMinutes`, `OverwriteResults`), `Cultures` (`Directory`, `RetentionDays`), `Settings:Directory`, `Logging` | Instalador | Al reiniciar el servicio |
 | `settings/instrument.json` | `instrumentId` (Analizadores.a_id) | Front › Instrumento | En el acto (invalida la caché de mapeo) |
 | `settings/communication.json` | `transport` (`mode`, `host`, `port`, `reconnectSeconds`) y `astm` (`level`, checksum, timeouts, separadores) | Front › Comunicación | Al guardar se reinicia el puerto si estaba abierto |
+| `settings/petitions.json` | `enabled` (apagado por defecto), `pollSeconds` (10) | Front › Peticiones | En el acto |
 | `settings/result-mappings.json` | `mappings: [{ code, description }]` | Front › Mapeo de resultados (alta, edición, baja, borrar todo, CSV) | En el acto |
 | `settings/organisms.json` · `antibiotics.json` | `mappings: [{ code, description }]` | Front › Microbiología (igual que el mapeo de resultados) | En el acto |
 | *(LIS)* `AnalizadoresDet` | Mapeo de pruebas: entrante/saliente, prueba del LIS, factor, sufijo… | Front › Mapeo de tests, vía `labcore-api` | En el acto (invalida la caché de mapeo) |
@@ -189,6 +252,10 @@ Synapsys por socket y expone un front React para operarlo. El puerto ASTM se abr
 | POST | `/api/port/open` · `/close` · `/restart` | Controlan el puerto ASTM sin reiniciar el servicio. |
 | GET · PUT | `/api/settings/instrument` | Instrumento configurado. |
 | GET · PUT | `/api/settings/communication` | Transporte + ASTM. El PUT reinicia el puerto si estaba abierto. |
+| GET · PUT | `/api/settings/petitions` | Prender/apagar el pulling de peticiones y su intervalo. |
+| GET | `/api/petitions/status` | Estado del envío (último poll, último envío, enviadas, último error), si hay Synapsys conectado y cuántas peticiones hay en cada estado en el LIS. |
+| GET | `/api/petitions?status=&barcode=&beforeId=&top=` | Listado de peticiones, de la más nueva a la más vieja. |
+| POST | `/api/petitions/reprocess` | `{ ids }`: las vuelve a pendientes; se mandan en el próximo silencio. |
 | GET · POST · PUT · DELETE | `/api/settings/test-mappings` | Mapeo de pruebas del LIS (PUT/DELETE con `?incomingCode=`). |
 | GET · PUT · DELETE | `/api/settings/catalogs/{catalog}` | Catálogo `results`, `organisms` o `antibiotics` (PUT/DELETE con `?code=`; PUT sin `code` = alta). |
 | POST | `/api/settings/catalogs/{catalog}/clear` · `/import?replace=` | Borrar todos · importar CSV (`codigo;descripcion`). |
@@ -201,11 +268,18 @@ Ambos WebSockets envían primero un buffer reciente al conectarse y luego el str
 
 Vite + React + TypeScript. `npm run build` compila a `src/Synapsys.Connector/wwwroot`, que Kestrel
 sirve como SPA. En desarrollo, `npm run dev` (puerto 5173) hace proxy de `/api` y `/ws` al servicio
-(`http://localhost:5081`). La UI tiene cuatro secciones: estado + controles del puerto, los dos monitores
-realtime, Settings (instrumento, comunicación, mapeo de tests y mapeo de resultados) y Microbiología
+(`http://localhost:5081`). La UI tiene estas secciones: estado + controles del puerto, los dos monitores
+realtime, Peticiones (prender/apagar, contadores, lista y reproceso), Settings (instrumento, comunicación, mapeo de tests y mapeo de resultados) y Microbiología
 (microorganismos y antibióticos).
 
 ## Puntos abiertos
+
+- **La tabla de peticiones crece.** El adapter de HUA borraba cada fila; el conector la deja con su
+  estado para poder verla y reprocesarla. Hace falta una purga periódica de `Processed`/`Discarded`
+  viejas (job del LIS o un endpoint), y conviene un índice por `InstrumentExternalCode, Status, Error`.
+- **Largos de `Status` y `Error`.** No hay esquema de la tabla a mano: la API escribe `Status` de hasta
+  9 caracteres y corta `Error` en 250. Si una instalación tiene columnas más chicas, se ajusta con
+  un override de `Petitions/UpdatePetitionStatus`.
 
 - **Mecanismos de resistencia**: el modelo y el informe los soportan, pero falta un log real para
   saber cómo los manda Synapsys. Hoy una categoría desconocida dentro de un aislado queda en el log

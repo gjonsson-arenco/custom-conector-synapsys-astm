@@ -73,7 +73,7 @@ public sealed class HighLevelChannel : IAstmChannel
         return SplitRecords(buffer.ToString());
     }
 
-    public async Task<bool> SendAsync(IReadOnlyList<AstmRecord> records, CancellationToken cancellationToken)
+    public async Task<SendOutcome> SendAsync(IReadOnlyList<AstmRecord> records, CancellationToken cancellationToken)
     {
         var message = new StringBuilder();
         message.Append((char)ControlChars.VT);
@@ -87,8 +87,9 @@ public sealed class HighLevelChannel : IAstmChannel
         message.Append((char)ControlChars.FS);
         message.Append((char)ControlChars.CR);
 
+        // Sin handshake no hay forma de saber si el otro extremo lo tomo: escrito es enviado.
         await _connection.WriteAsync(ControlChars.Encoding.GetBytes(message.ToString()), cancellationToken);
-        return true;
+        return SendOutcome.Sent;
     }
 
     private async ValueTask<int> ReadWithTimeoutAsync(CancellationToken cancellationToken)

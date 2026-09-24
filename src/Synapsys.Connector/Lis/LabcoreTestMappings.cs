@@ -63,7 +63,7 @@ public sealed class LabcoreTestMappings
     {
         var instrumentId = RequireInstrument();
         using var response = await Http.GetAsync($"instruments/{instrumentId}/tests?includeInactive=true", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await LisRequestException.ThrowIfFailedAsync(response, cancellationToken);
 
         var body = await response.Content.ReadFromJsonAsync<InstrumentDto>(Json, cancellationToken);
         return new InstrumentTestMappings(instrumentId, body?.Name, body?.Tests ?? []);
@@ -85,7 +85,7 @@ public sealed class LabcoreTestMappings
     private async Task WriteAsync(Func<HttpClient, Task<HttpResponseMessage>> send, CancellationToken cancellationToken)
     {
         using var response = await send(Http);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await LisRequestException.ThrowIfFailedAsync(response, cancellationToken);
         _gateway.InvalidateMapping();
     }
 
@@ -97,37 +97,5 @@ public sealed class LabcoreTestMappings
             : throw new LisRequestException(HttpStatusCode.Conflict, "Falta configurar el instrumento (Settings > Instrumento).", null);
     }
 
-    /// <summary>Traduce el ProblemDetails de labcore-api a un error que el front pueda mostrar.</summary>
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (response.IsSuccessStatusCode)
-        {
-            return;
-        }
-
-        ProblemDto? problem = null;
-        try
-        {
-            problem = await response.Content.ReadFromJsonAsync<ProblemDto>(Json, cancellationToken);
-        }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException)
-        {
-        }
-
-        var message = problem?.Detail ?? problem?.Title ?? $"labcore-api respondio {(int)response.StatusCode}.";
-        throw new LisRequestException(response.StatusCode, message, problem?.Errors);
-    }
-
     private sealed record InstrumentDto(string? Name, IReadOnlyList<TestMapping>? Tests);
-
-    private sealed record ProblemDto(string? Title, string? Detail, Dictionary<string, string[]>? Errors);
-}
-
-/// <summary>labcore-api rechazo la operacion; viaja al front con el mismo status y el detalle.</summary>
-public sealed class LisRequestException(HttpStatusCode status, string message, IDictionary<string, string[]>? errors)
-    : Exception(message)
-{
-    public HttpStatusCode Status { get; } = status;
-
-    public IDictionary<string, string[]>? Errors { get; } = errors;
 }

@@ -8,6 +8,7 @@ using Synapsys.Connector.Flows;
 using Synapsys.Connector.Lis;
 using Synapsys.Connector.Microbiology;
 using Synapsys.Connector.Monitoring;
+using Synapsys.Connector.Petitions;
 using Synapsys.Connector.Runtime;
 using Synapsys.Connector.Web;
 
@@ -40,6 +41,8 @@ builder.Services.PostConfigure<CultureStoreOptions>(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CultureStore>();
 builder.Services.AddSingleton<TransmissionRouter>();
+builder.Services.AddSingleton<ILisPetitions, LabcorePetitions>();
+builder.Services.AddSingleton<PetitionOutbox>();
 
 builder.Services.AddSingleton<IConnectorMonitor, ConnectorMonitor>();
 builder.Services.AddSingleton<TransportFactory>();
@@ -59,6 +62,7 @@ app.UseStaticFiles();
 
 app.MapConnectorApi();
 app.MapSettingsApi();
+app.MapPetitionsApi();
 app.MapMonitorSockets();
 
 // Cualquier ruta no-API cae en la SPA.
