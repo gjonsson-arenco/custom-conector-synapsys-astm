@@ -99,8 +99,9 @@ public static class SettingsEndpoints
 
     private static void MapTestMappings(RouteGroupBuilder group)
     {
-        group.MapGet("/", (LabcoreTestMappings catalog, CancellationToken cancellationToken) =>
-            CallLisAsync(async () => Results.Ok(await catalog.GetAsync(cancellationToken))));
+        // Sale del cache; refresh=true lo relee del LIS (para ver lo que se edito directo en el LIS).
+        group.MapGet("/", (bool? refresh, LabcoreTestMappings catalog, CancellationToken cancellationToken) =>
+            CallLisAsync(async () => Results.Ok(await catalog.GetAsync(refresh ?? false, cancellationToken))));
 
         group.MapPost("/", (TestMapping mapping, LabcoreTestMappings catalog, CancellationToken cancellationToken) =>
             CallLisAsync(async () =>

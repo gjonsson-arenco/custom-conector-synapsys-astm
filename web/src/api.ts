@@ -238,7 +238,8 @@ export const api = {
   },
   reprocessPetitions: (ids: number[]) => send<void>("/api/petitions/reprocess", "POST", { ids }),
 
-  getTestMappings: () => fetch("/api/settings/test-mappings").then(json<InstrumentTestMappings>),
+  getTestMappings: (refresh = false) =>
+    fetch(`/api/settings/test-mappings${refresh ? "?refresh=true" : ""}`).then(json<InstrumentTestMappings>),
   createTestMapping: (value: TestMapping) => send<void>("/api/settings/test-mappings", "POST", value),
   updateTestMapping: (incomingCode: string, value: TestMapping) =>
     send<void>(`/api/settings/test-mappings${q("incomingCode", incomingCode)}`, "PUT", value),

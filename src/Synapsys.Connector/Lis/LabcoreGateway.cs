@@ -10,8 +10,8 @@ using Synapsys.Connector.Monitoring;
 namespace Synapsys.Connector.Lis;
 
 /// <summary>
-/// Implementacion de <see cref="ILisGateway"/> contra labcore-api. Cachea el mapeo de codigos
-/// que vive en el LIS (GET /instruments/{id}/tests) y lo aplica en las dos direcciones. Antes de
+/// Implementacion de <see cref="ILisGateway"/> contra labcore-api. Aplica en las dos direcciones
+/// el mapeo de codigos que vive en el LIS (cacheado por <see cref="LabcoreTestMappings"/>). Antes de
 /// informar un resultado lo traduce con el mapeo de resultados (settings/result-mappings.json); los
 /// cultivos, ademas, con los catalogos de microorganismos y antibioticos. Si una regla de
 /// autovalidacion (settings/autovalidation.json) acepta el resultado, va ya validado.
@@ -25,13 +25,9 @@ public sealed class LabcoreGateway : ILisGateway
     private readonly SettingsFile<InstrumentSettings> _instrument;
     private readonly CodeCatalogs _catalogs;
     private readonly SettingsFile<AutoValidationSettings> _autoValidation;
+    private readonly LabcoreTestMappings _testMappings;
     private readonly IConnectorMonitor _monitor;
     private readonly ILogger<LabcoreGateway> _logger;
-
-    private readonly SemaphoreSlim _mappingGate = new(1, 1);
-    private Dictionary<string, TestMap> _byIncoming = new(StringComparer.OrdinalIgnoreCase);
-    private Dictionary<string, string> _outgoingByTest = new(StringComparer.OrdinalIgnoreCase);
-    private DateTimeOffset _mappingLoadedAt = DateTimeOffset.MinValue;
 
     public LabcoreGateway(
         IHttpClientFactory httpClientFactory,
@@ -39,6 +35,7 @@ public sealed class LabcoreGateway : ILisGateway
         SettingsFile<InstrumentSettings> instrument,
         CodeCatalogs catalogs,
         SettingsFile<AutoValidationSettings> autoValidation,
+        LabcoreTestMappings testMappings,
         IConnectorMonitor monitor,
         ILogger<LabcoreGateway> logger)
     {
@@ -47,15 +44,10 @@ public sealed class LabcoreGateway : ILisGateway
         _instrument = instrument;
         _catalogs = catalogs;
         _autoValidation = autoValidation;
+        _testMappings = testMappings;
         _monitor = monitor;
         _logger = logger;
-
-        // Otro analizador es otro mapeo.
-        _instrument.Changed += _ => InvalidateMapping();
     }
-
-    /// <summary>Descarta el mapeo cacheado; la proxima operacion lo vuelve a pedir al LIS.</summary>
-    public void InvalidateMapping() => _mappingLoadedAt = DateTimeOffset.MinValue;
 
     public async Task<SampleOrders?> GetOrdersAsync(string barcode, CancellationToken cancellationToken)
     {
@@ -72,7 +64,7 @@ public sealed class LabcoreGateway : ILisGateway
         response.EnsureSuccessStatusCode();
 
         var sample = await response.Content.ReadFromJsonAsync<SampleDto>(Json, cancellationToken);
-        var mapping = await GetMappingAsync(cancellationToken);
+        var mapping = await _testMappings.GetIndexAsync(cancellationToken);
 
         var codes = (sample?.Tests ?? [])
             .Where(test => string.Equals(test.Status, "Pending", StringComparison.OrdinalIgnoreCase))
@@ -87,7 +79,7 @@ public sealed class LabcoreGateway : ILisGateway
 
     public async Task SaveResultsAsync(string barcode, IReadOnlyList<InstrumentResult> results, CancellationToken cancellationToken)
     {
-        var mapping = await GetMappingAsync(cancellationToken);
+        var mapping = await _testMappings.GetIndexAsync(cancellationToken);
         var payload = new List<SaveTestResultDto>();
         var sampleType = new SampleTypeLookup(this, barcode, cancellationToken);
 
@@ -143,7 +135,7 @@ public sealed class LabcoreGateway : ILisGateway
 
     public async Task SaveCultureAsync(CultureReport culture, CancellationToken cancellationToken)
     {
-        var mapping = await GetMappingAsync(cancellationToken);
+        var mapping = await _testMappings.GetIndexAsync(cancellationToken);
 
         if (!mapping.ByIncoming.TryGetValue(culture.TestCode.Trim(), out var map))
         {
@@ -312,71 +304,6 @@ public sealed class LabcoreGateway : ILisGateway
         return code;
     }
 
-    private async Task<Mapping> GetMappingAsync(CancellationToken cancellationToken)
-    {
-        var fresh = DateTimeOffset.UtcNow - _mappingLoadedAt < TimeSpan.FromMinutes(Math.Max(1, _options.MappingRefreshMinutes));
-        if (fresh && _mappingLoadedAt != DateTimeOffset.MinValue)
-        {
-            return new Mapping(_byIncoming, _outgoingByTest);
-        }
-
-        await _mappingGate.WaitAsync(cancellationToken);
-
-        try
-        {
-            fresh = DateTimeOffset.UtcNow - _mappingLoadedAt < TimeSpan.FromMinutes(Math.Max(1, _options.MappingRefreshMinutes));
-            if (fresh && _mappingLoadedAt != DateTimeOffset.MinValue)
-            {
-                return new Mapping(_byIncoming, _outgoingByTest);
-            }
-
-            var instrumentId = _instrument.Current.InstrumentId;
-            if (instrumentId <= 0)
-            {
-                throw new InvalidOperationException("Falta configurar el instrumento (Settings > Instrumento).");
-            }
-
-            var http = _httpClientFactory.CreateClient("labcore");
-            var tests = await http.GetFromJsonAsync<InstrumentTestsDto>(
-                $"instruments/{instrumentId}/tests", Json, cancellationToken);
-
-            var byIncoming = new Dictionary<string, TestMap>(StringComparer.OrdinalIgnoreCase);
-            var outgoingByTest = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var test in tests?.Tests ?? [])
-            {
-                if (string.IsNullOrWhiteSpace(test.TestCode))
-                {
-                    continue;
-                }
-
-                var testCode = test.TestCode.Trim();
-
-                if (!string.IsNullOrWhiteSpace(test.IncomingCode))
-                {
-                    byIncoming[test.IncomingCode.Trim()] = new TestMap(testCode, test.Factor ?? 1d, test.AutovalidationEnabled ?? false);
-                }
-
-                if (!string.IsNullOrWhiteSpace(test.OutgoingCode))
-                {
-                    outgoingByTest[testCode] = test.OutgoingCode.Trim();
-                }
-            }
-
-            _byIncoming = byIncoming;
-            _outgoingByTest = outgoingByTest;
-            _mappingLoadedAt = DateTimeOffset.UtcNow;
-
-            _logger.LogInformation("Mapeo del analizador {InstrumentId} cargado: {Count} codigos.", instrumentId, byIncoming.Count);
-
-            return new Mapping(_byIncoming, _outgoingByTest);
-        }
-        finally
-        {
-            _mappingGate.Release();
-        }
-    }
-
     /// <summary>Aplica el factor de conversion cuando el valor es numerico; si no, lo deja igual.</summary>
     private static string ApplyFactor(string value, double factor)
     {
@@ -400,19 +327,9 @@ public sealed class LabcoreGateway : ILisGateway
     /// <summary>Laboratorios.l_estado: validado. labcore-api sella la fecha y el usuario de validacion.</summary>
     private const short ValidatedStatus = 4;
 
-    private readonly record struct TestMap(string TestCode, double Factor, bool AutovalidationEnabled);
-
-    private readonly record struct Mapping(
-        IReadOnlyDictionary<string, TestMap> ByIncoming,
-        IReadOnlyDictionary<string, string> OutgoingByTest);
-
     private sealed record SampleDto(string? SampleTypeCode, IReadOnlyList<SampleTestDto>? Tests);
 
     private sealed record SampleTestDto(string? TestCode, string? Status);
-
-    private sealed record InstrumentTestsDto(IReadOnlyList<MappedTestDto>? Tests);
-
-    private sealed record MappedTestDto(string? TestCode, string? IncomingCode, string? OutgoingCode, double? Factor, bool? AutovalidationEnabled);
 
     private sealed class SaveResultsDto
     {

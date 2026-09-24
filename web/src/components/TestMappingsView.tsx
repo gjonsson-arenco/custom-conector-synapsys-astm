@@ -26,10 +26,10 @@ export function TestMappingsView() {
   const [draft, setDraft] = useState<TestMapping>(EMPTY);
   const [busy, setBusy] = useState(false);
 
-  const load = async () => {
+  const load = async (refresh = false) => {
     setLoading(true);
     try {
-      setData(await api.getTestMappings());
+      setData(await api.getTestMappings(refresh));
       setError(null);
     } catch (e) {
       setData(null);
@@ -103,7 +103,7 @@ export function TestMappingsView() {
               {data.instrumentName ?? "Analizador"} #{data.instrumentId}
             </span>
           )}
-          <button className="link" onClick={load}>
+          <button className="link" onClick={() => load(true)} title="Releer el mapeo del LIS">
             Actualizar
           </button>
         </div>

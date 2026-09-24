@@ -38,15 +38,20 @@ public sealed class LabcoreGatewayCultureTests : IDisposable
         var factory = Substitute.For<IHttpClientFactory>();
         factory.CreateClient("labcore").Returns(_ => new HttpClient(_labcore) { BaseAddress = new Uri("http://labcore/api/v1/") });
 
+        var instrument = new SettingsFile<InstrumentSettings>(
+            Path.Combine(_directory, "instrument.json"), () => new InstrumentSettings { InstrumentId = 12 }, NullLogger.Instance);
+        var options = Options.Create(new LabcoreOptions { UserId = 5 });
+
         return new LabcoreGateway(
             factory,
-            Options.Create(new LabcoreOptions { UserId = 5 }),
-            new SettingsFile<InstrumentSettings>(Path.Combine(_directory, "instrument.json"), () => new InstrumentSettings { InstrumentId = 12 }, NullLogger.Instance),
+            options,
+            instrument,
             new CodeCatalogs(
                 Catalog("results.json", ("C3", "Positivo (Bacilos Gram Negativos)")),
                 Catalog("organisms.json", ("PSEAER", "Pseudomonas aeruginosa")),
                 Catalog("antibiotics.json", ("ATM", "Aztreonam"))),
             new SettingsFile<AutoValidationSettings>(Path.Combine(_directory, "autovalidation.json"), () => new AutoValidationSettings(), NullLogger.Instance),
+            new LabcoreTestMappings(factory, options, instrument, NullLogger<LabcoreTestMappings>.Instance),
             new ConnectorMonitor(),
             NullLogger<LabcoreGateway>.Instance);
     }

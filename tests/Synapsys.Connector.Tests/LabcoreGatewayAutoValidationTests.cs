@@ -40,10 +40,14 @@ public sealed class LabcoreGatewayAutoValidationTests : IDisposable
         CodeCatalog Catalog(string name, params CodeMapping[] rows) =>
             new(new SettingsFile<CodeCatalogSettings>(Path.Combine(_directory, name), () => new CodeCatalogSettings { Mappings = rows }, NullLogger.Instance));
 
+        var instrument = new SettingsFile<InstrumentSettings>(
+            Path.Combine(_directory, "instrument.json"), () => new InstrumentSettings { InstrumentId = 12 }, NullLogger.Instance);
+        var options = Options.Create(new LabcoreOptions { UserId = 5 });
+
         return new LabcoreGateway(
             factory,
-            Options.Create(new LabcoreOptions { UserId = 5 }),
-            new SettingsFile<InstrumentSettings>(Path.Combine(_directory, "instrument.json"), () => new InstrumentSettings { InstrumentId = 12 }, NullLogger.Instance),
+            options,
+            instrument,
             new CodeCatalogs(
                 Catalog("results.json", new CodeMapping("G8", "Cocos Gram positivos"), new CodeMapping("NEGB", "NO SE OBTUVO DESARROLLO BACTERIANO")),
                 Catalog("organisms.json"),
@@ -52,6 +56,7 @@ public sealed class LabcoreGatewayAutoValidationTests : IDisposable
                 Path.Combine(_directory, "autovalidation.json"),
                 () => new AutoValidationSettings { Enabled = enabled, Rules = rules },
                 NullLogger.Instance),
+            new LabcoreTestMappings(factory, options, instrument, NullLogger<LabcoreTestMappings>.Instance),
             new ConnectorMonitor(),
             NullLogger<LabcoreGateway>.Instance);
     }
