@@ -63,6 +63,39 @@
       "problemMatcher": []
     },
     {
+      "label": "connector: rebuild",
+      "detail": "Recompila el conector desde cero (sin build incremental).",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "--no-incremental",
+        "${workspaceFolder}/src/Synapsys.Connector/Synapsys.Connector.csproj"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "connector: rebuild all + run",
+      "detail": "Compila el front a wwwroot, recompila el back y levanta el conector (http://localhost:5081).",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--no-build",
+        "--project",
+        "${workspaceFolder}/src/Synapsys.Connector/Synapsys.Connector.csproj"
+      ],
+      "options": {
+        "env": {
+          "ASPNETCORE_ENVIRONMENT": "Development"
+        }
+      },
+      "dependsOn": ["web: build", "connector: rebuild"],
+      "dependsOrder": "sequence",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
       "label": "licencias: generar",
       "detail": "Generador de licencias de los conectores (interactivo). Necesita la clave privada de firma.",
       "type": "process",
