@@ -63,6 +63,14 @@
       "problemMatcher": []
     },
     {
+      "label": "licencias: generar",
+      "detail": "Generador de licencias de los conectores (interactivo). Necesita la clave privada de firma.",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/tools/Arenco.Licensing.Generator/Arenco.Licensing.Generator.csproj"],
+      "problemMatcher": []
+    },
+    {
       "label": "build",
       "detail": "Compila toda la solucion.",
       "type": "process",

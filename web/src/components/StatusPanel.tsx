@@ -93,7 +93,15 @@ export function StatusPanel() {
       </div>
 
       {(error ?? status?.lastError) && (
-        <p className="error">{error ?? status?.lastError}</p>
+        <p className="error">
+          {error ?? status?.lastError}
+          {!error && status?.blockedByLicense && (
+            <>
+              {" "}
+              <a href="#license">Instalar licencia</a>
+            </>
+          )}
+        </p>
       )}
     </section>
   );

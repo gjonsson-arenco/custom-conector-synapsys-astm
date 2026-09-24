@@ -10,6 +10,37 @@ export interface ConnectorStatus {
   transmissionsReceived: number;
   responsesSent: number;
   lastError: string | null;
+  /** El ultimo intento de abrir el puerto lo freno la licencia. */
+  blockedByLicense: boolean;
+}
+
+export type LicenseState =
+  | "Missing"
+  | "Invalid"
+  | "WrongProduct"
+  | "WrongMachine"
+  | "Valid"
+  | "ExpiringSoon"
+  | "Grace"
+  | "Expired";
+
+/** Estado de la licencia del conector (/api/license). */
+export interface LicenseStatus {
+  state: LicenseState;
+  isUsable: boolean;
+  message: string;
+  product: string;
+  machineCode: string;
+  license: {
+    product: string;
+    customer: string;
+    machineCode: string;
+    issuedAt: string;
+    expiresAt: string;
+  } | null;
+  graceUntil: string | null;
+  daysRemaining: number | null;
+  needsAttention: boolean;
 }
 
 export interface TestMapping {
@@ -180,6 +211,9 @@ export const api = {
   openPort: () => send<ConnectorStatus>("/api/port/open", "POST"),
   closePort: () => send<ConnectorStatus>("/api/port/close", "POST"),
   restartPort: () => send<ConnectorStatus>("/api/port/restart", "POST"),
+
+  getLicense: () => fetch("/api/license").then(json<LicenseStatus>),
+  installLicense: (key: string) => send<LicenseStatus>("/api/license", "PUT", { key }),
 
   getInstrument: () => fetch("/api/settings/instrument").then(json<InstrumentSettings>),
   saveInstrument: (value: InstrumentSettings) => send<InstrumentSettings>("/api/settings/instrument", "PUT", value),

@@ -1,3 +1,4 @@
+using Arenco.Licensing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -49,6 +50,10 @@ builder.Services.AddSingleton<TransportFactory>();
 builder.Services.AddSingleton<ConnectorController>();
 builder.Services.AddHostedService<ConnectorBootstrap>();
 
+// Sin licencia vigente (o en tolerancia) el puerto ASTM no se abre.
+builder.Services.AddArencoLicensing(builder.Configuration, builder.Environment, ArencoLicensing.Products.SynapsysConnector);
+builder.Services.AddHostedService<LicenseWatchdog>();
+
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 
@@ -63,6 +68,7 @@ app.UseStaticFiles();
 app.MapConnectorApi();
 app.MapSettingsApi();
 app.MapPetitionsApi();
+app.MapLicenseApi();
 app.MapMonitorSockets();
 
 // Cualquier ruta no-API cae en la SPA.

@@ -11,6 +11,10 @@
 
   <!-- Kestrel, hosting y HttpClientFactory llegan por el framework Microsoft.AspNetCore.App. -->
 
+  <ItemGroup>
+    <ProjectReference Include="..\Arenco.Licensing\Arenco.Licensing.csproj" />
+  </ItemGroup>
+
   <!-- Valores de partida de los settings editables; se copian a settings/ la primera vez. -->
   <ItemGroup>
     <EmbeddedResource Include="Configuration\Defaults\*.json" LogicalName="Synapsys.Connector.Configuration.Defaults.%(Filename)%(Extension)" />

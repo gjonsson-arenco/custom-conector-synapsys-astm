@@ -19,6 +19,12 @@ src/Synapsys.Connector/wwwroot/
 # Settings vivos de cada instalacion (se crean al arrancar)
 src/Synapsys.Connector/settings/
 
+# Licencia de cada instalacion y salida del generador de licencias
+*.lic
+licencias/
+# Clave privada de firma: nunca en el repo
+*.pem
+
 # Cultivos en curso (estado acumulado de microbiologia de cada instalacion)
 src/Synapsys.Connector/data/
 

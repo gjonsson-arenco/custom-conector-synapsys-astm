@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Licenciamiento de los conectores custom de Arenco. Cualquier conector ASP.NET la referencia,
+    declara su producto con AddArencoLicensing y consulta LicenseManager antes de levantar la conexion.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Arenco.Licensing</RootNamespace>
+    <AssemblyName>Arenco.Licensing</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

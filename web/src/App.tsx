@@ -8,6 +8,8 @@ import { CommsMonitor } from "./components/CommsMonitor";
 import { EventsMonitor } from "./components/EventsMonitor";
 import { PetitionsView } from "./components/PetitionsView";
 import { AutoValidationView } from "./components/AutoValidationView";
+import { LicenseView } from "./components/LicenseView";
+import { LicenseBanner } from "./components/LicenseBanner";
 
 type ViewId =
   | "status"
@@ -19,7 +21,8 @@ type ViewId =
   | "result-mappings"
   | "autovalidation"
   | "organisms"
-  | "antibiotics";
+  | "antibiotics"
+  | "license";
 
 interface NavGroup {
   title?: string;
@@ -27,7 +30,12 @@ interface NavGroup {
 }
 
 const NAV: NavGroup[] = [
-  { items: [{ id: "status", label: "Estado" }] },
+  {
+    items: [
+      { id: "status", label: "Estado" },
+      { id: "license", label: "Licencia" }
+    ]
+  },
   {
     title: "Monitoreo",
     items: [
@@ -77,6 +85,8 @@ export default function App() {
         <span className="subtitle">Panel de control y monitor</span>
       </header>
 
+      <LicenseBanner />
+
       <div className="shell">
         <nav className="sidebar">
           {NAV.map((group, gi) => (
@@ -99,6 +109,9 @@ export default function App() {
           {/* Los monitores quedan montados aunque no se vean para no perder el trafico acumulado. */}
           <View active={view === "status"}>
             <StatusPanel />
+          </View>
+          <View active={view === "license"}>
+            <LicenseView />
           </View>
           <View active={view === "monitor"} keepMounted>
             <div className="monitor-grid">

@@ -29,4 +29,5 @@ public sealed record ConnectorStatus(
     DateTimeOffset? StartedAt,
     long TransmissionsReceived,
     long ResponsesSent,
-    string? LastError);
+    string? LastError,
+    bool BlockedByLicense);

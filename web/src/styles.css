@@ -613,3 +613,67 @@ button.link.danger {
   justify-content: center;
   margin-top: 12px;
 }
+
+/* Licencia */
+
+.license-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid;
+  font-size: 14px;
+}
+
+.license-banner.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.license-banner.blocked {
+  color: var(--err);
+  border-color: var(--err);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.license-banner a,
+.error a {
+  color: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.license-message {
+  margin: 0 0 14px;
+}
+
+.machine-code {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+textarea.license-input {
+  width: 100%;
+  resize: vertical;
+  margin-bottom: 12px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+textarea.license-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}

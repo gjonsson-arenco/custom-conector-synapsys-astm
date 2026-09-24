@@ -285,6 +285,7 @@ Synapsys por socket y expone un front React para operarlo. El puerto ASTM se abr
 | GET · POST · PUT · DELETE | `/api/settings/test-mappings` | Mapeo de pruebas del LIS (PUT/DELETE con `?incomingCode=`). |
 | GET · PUT · DELETE | `/api/settings/catalogs/{catalog}` | Catálogo `results`, `organisms` o `antibiotics` (PUT/DELETE con `?code=`; PUT sin `code` = alta). |
 | POST | `/api/settings/catalogs/{catalog}/clear` · `/import?replace=` | Borrar todos · importar CSV (`codigo;descripcion`). |
+| GET · PUT | `/api/license` | Estado de la licencia y código de máquina · instalar una clave (`{ key }`; 400 con el motivo si no sirve). |
 | WS | `/ws/comms` | Comunicación ASTM cruda (RX/TX, hex + texto) en tiempo real. |
 | WS | `/ws/events` | Eventos semánticos (conexión, consulta, resultados, errores). |
 
@@ -295,10 +296,66 @@ Ambos WebSockets envían primero un buffer reciente al conectarse y luego el str
 Vite + React + TypeScript. `npm run build` compila a `src/Synapsys.Connector/wwwroot`, que Kestrel
 sirve como SPA. En desarrollo, `npm run dev` (puerto 5173) hace proxy de `/api` y `/ws` al servicio
 (`http://localhost:5081`). La UI tiene estas secciones: estado + controles del puerto, los dos monitores
-realtime, Peticiones (prender/apagar, contadores, lista y reproceso), Settings (instrumento, comunicación, mapeo de tests y mapeo de resultados) y Microbiología
+realtime, Licencia (código de máquina, vencimiento, instalar clave), Peticiones (prender/apagar, contadores, lista y reproceso), Settings (instrumento, comunicación, mapeo de tests y mapeo de resultados) y Microbiología
 (microorganismos y antibióticos).
 
+## Licenciamiento
+
+Sin licencia vigente el conector **no abre el puerto ASTM**; el front y la API siguen andando para
+poder instalarla. Es la librería `src/Arenco.Licensing`, pensada para cualquier conector custom: el
+conector declara su producto y consulta `LicenseManager` antes de levantar la conexión.
+
+```mermaid
+sequenceDiagram
+    participant C as Conector (cliente)
+    participant A as Arenco (generador)
+    C->>C: Código de máquina (pantalla Licencia)
+    C->>A: XXXX-XXXX-XXXX-XXXX
+    A->>A: Firma producto + cliente + máquina + vencimiento (clave privada)
+    A-->>C: Clave de licencia
+    C->>C: Pega la clave → verifica con la clave pública → license.lic → abre el puerto
+```
+
+- **La clave es una licencia firmada**, no un hash con secreto compartido como la de Epi+:
+  `base64url(json).base64url(firma ECDSA P-256)`. El JSON (producto, cliente, código de máquina,
+  emisión, vencimiento) va en claro; cambiar un carácter invalida la firma. El conector solo tiene la
+  clave pública (`ArencoLicensing.PublicKey`): descompilarlo no permite fabricar licencias.
+- **Código de máquina**: hash del `MachineGuid` de Windows (`/etc/machine-id` en Linux). No cambia
+  al renombrar el equipo; sí al reinstalar el SO o mover el conector a otro servidor.
+- **Estados** (con la fecha local del día, se recalcula en cada consulta):
+
+| Estado | ¿Abre el puerto? | Cuándo |
+| --- | --- | --- |
+| `Valid` | Sí | Faltan 30 días o más. |
+| `ExpiringSoon` | Sí, avisando | Faltan menos de 30 días (`WarningDays`). |
+| `Grace` | Sí, avisando | Venció hace 30 días o menos (`GraceDays`, tolerancia). |
+| `Expired` | No | Pasó la tolerancia. |
+| `Missing` · `Invalid` · `WrongProduct` · `WrongMachine` | No | Sin licencia, firma inválida, de otro conector o de otra máquina. |
+
+- **Cumplimiento**: `ConnectorController.OpenAsync` rechaza abrir sin licencia utilizable (queda
+  `blockedByLicense` y el motivo en `lastError`). `LicenseWatchdog` revisa cada hora y al instalar
+  una licencia: cierra el puerto si la tolerancia terminó con el conector andando, lo abre si estaba
+  frenado y la licencia nueva sirve, y avisa una vez por día (log + evento `license.warning`) mientras
+  esté por vencer o en tolerancia. El front muestra un banner en esos casos.
+- **Instalación**: desde el front (Licencia → pegar clave) o dejando el `.lic` como `license.lic`
+  junto al ejecutable. Una clave que no sirve no pisa a la instalada.
+- **Configuración** (`appsettings.json`, sección `Licensing`, toda opcional): `Path`
+  (`license.lic`), `WarningDays` (30), `GraceDays` (30).
+- **Emitir licencias**: `tools/Arenco.Licensing.Generator` (ver su README). La clave privada vive
+  fuera del repo, en `%APPDATA%\Arenco\Licensing\signing-key.pem` de quien emite.
+
+### Licenciar otro conector
+
+1. Referenciar `Arenco.Licensing` y agregar el producto a `ArencoLicensing.Products`/`KnownProducts`.
+2. `builder.Services.AddArencoLicensing(builder.Configuration, builder.Environment, "<producto>")` y
+   `app.MapLicenseApi()`.
+3. Antes de levantar la conexión, `licenseManager.Current.IsUsable`; suscribirse a
+   `LicenseManager.Changed` (o copiar `LicenseWatchdog`) para reaccionar a instalaciones y vencimientos.
+
 ## Puntos abiertos
+
+- **Reloj del servidor.** La vigencia se calcula con la fecha del sistema: atrasar el reloj estira
+  la licencia. Si hace falta, se puede persistir la última fecha vista y rechazar retrocesos.
 
 - **La tabla de peticiones crece.** El adapter de HUA borraba cada fila; el conector la deja con su
   estado para poder verla y reprocesarla. Hace falta una purga periódica de `Processed`/`Discarded`

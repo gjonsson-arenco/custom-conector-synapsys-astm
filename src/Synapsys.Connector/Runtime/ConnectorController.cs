@@ -1,3 +1,4 @@
+using Arenco.Licensing;
 using Microsoft.Extensions.Logging;
 using Synapsys.Connector.Astm;
 using Synapsys.Connector.Configuration;
@@ -14,6 +15,9 @@ namespace Synapsys.Connector.Runtime;
 /// arrancable/parable desde el front. Cada transmision y cada byte alimentan el monitor.
 /// </summary>
 /// <remarks>
+/// <para>Sin licencia utilizable el puerto no se abre: <see cref="OpenAsync"/> lo rechaza y deja el
+/// motivo en <see cref="ConnectorStatus.LastError"/>. <see cref="LicenseWatchdog"/> lo reabre al
+/// instalar una licencia y lo cierra si vence mientras corre.</para>
 /// Con la linea en silencio la sesion le da el turno al <see cref="PetitionOutbox"/> para bajar
 /// las muestras que pide el LIS. El equipo tiene prioridad: si empieza a hablar, se lo atiende.
 /// </remarks>
@@ -28,6 +32,7 @@ public sealed class ConnectorController : IAsyncDisposable
     private readonly IConnectorMonitor _monitor;
     private readonly PetitionOutbox _petitions;
     private readonly SettingsFile<CommunicationSettings> _communication;
+    private readonly LicenseManager _license;
     private readonly ILogger<ConnectorController> _logger;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -43,6 +48,7 @@ public sealed class ConnectorController : IAsyncDisposable
     private long _received;
     private long _sent;
     private string? _lastError;
+    private volatile bool _blockedByLicense;
 
     public ConnectorController(
         TransportFactory transportFactory,
@@ -51,6 +57,7 @@ public sealed class ConnectorController : IAsyncDisposable
         IConnectorMonitor monitor,
         PetitionOutbox petitions,
         SettingsFile<CommunicationSettings> communication,
+        LicenseManager license,
         ILogger<ConnectorController> logger)
     {
         _transportFactory = transportFactory;
@@ -59,6 +66,7 @@ public sealed class ConnectorController : IAsyncDisposable
         _monitor = monitor;
         _petitions = petitions;
         _communication = communication;
+        _license = license;
         _logger = logger;
     }
 
@@ -76,7 +84,8 @@ public sealed class ConnectorController : IAsyncDisposable
                 _startedAt,
                 Interlocked.Read(ref _received),
                 Interlocked.Read(ref _sent),
-                _lastError);
+                _lastError,
+                _blockedByLicense);
         }
     }
 
@@ -87,6 +96,17 @@ public sealed class ConnectorController : IAsyncDisposable
         {
             if (_loop is { IsCompleted: false })
             {
+                return;
+            }
+
+            var license = _license.Current;
+            _blockedByLicense = !license.IsUsable;
+            if (_blockedByLicense)
+            {
+                _lastError = license.Message;
+                SetState(PortState.Stopped);
+                _logger.LogError("No se abre el puerto por la licencia: {Message}", license.Message);
+                _monitor.PublishEvent(ConnectorEvent.Error("license.blocked", $"No se abre el puerto: {license.Message}"));
                 return;
             }
 
@@ -156,6 +176,9 @@ public sealed class ConnectorController : IAsyncDisposable
 
     /// <summary>Si el puerto esta abierto (o intentando abrirse).</summary>
     public bool IsOpen => _loop is { IsCompleted: false };
+
+    /// <summary>Si el ultimo intento de abrir el puerto lo freno la licencia.</summary>
+    public bool BlockedByLicense => _blockedByLicense;
 
     private async Task RunAsync(CommunicationSettings settings, CancellationToken cancellationToken)
     {
