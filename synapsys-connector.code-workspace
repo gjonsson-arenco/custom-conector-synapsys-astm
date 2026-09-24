@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../labcore api"
+		},
+		{
+			"path": "../../Becton/license generator"
 		}
 	],
 	"settings": {}
