@@ -59,6 +59,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var app = builder.Build();
 
+// La administracion es solo local: nada del front ni de la API se atiende por red.
+app.UseLocalhostOnly();
+
 app.UseWebSockets();
 
 // Front React compilado (si existe wwwroot).
